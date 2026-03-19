@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.codex-git-test/
+*.log
+.env
+.env.local
+.env.*.local
+tsconfig.tsbuildinfo
+.DS_Store
