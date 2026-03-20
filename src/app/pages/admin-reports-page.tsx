@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiRequest } from "../api/client";
+import { useQA } from "../store/qa-context";
 
 type AdminReport = {
   id: number;
@@ -16,6 +17,7 @@ type AdminReport = {
 };
 
 export function AdminReportsPage() {
+  const { actions } = useQA();
   const [items, setItems] = useState<AdminReport[]>([]);
   const [status, setStatus] = useState("pending");
 
@@ -64,7 +66,7 @@ export function AdminReportsPage() {
                         method: "POST",
                         body: JSON.stringify({ action, reviewNote: "" }),
                       });
-                      await refresh();
+                      await Promise.all([refresh(), actions.refreshAll()]);
                     }}
                   >
                     {action}
