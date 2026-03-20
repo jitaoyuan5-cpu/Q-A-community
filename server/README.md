@@ -7,6 +7,7 @@
 4. Seed sample data: `npm run seed`
 5. Start API: `npm run dev`
 6. When starting from the repo root with `npm run server:dev`, the wrapper script now checks whether port `4000` is already occupied and fails fast instead of silently leaving you on a stale backend
+7. API startup now auto-applies any pending SQL migrations before listening, so an outdated local schema does not break auth or profile queries
 
 ## Test
 - Integration tests with mocked DB layer: `npm run test`
