@@ -6,6 +6,7 @@ import { zhCN } from "date-fns/locale";
 import { RightSidebar } from "../components/layout/right-sidebar";
 import { useQA } from "../store/qa-context";
 import { findUser, selectQuestionsForHome, type HomeTab } from "../store/selectors";
+import { FavoriteButton } from "../components/content/favorite-button";
 
 const tabs: HomeTab[] = ["newest", "hot", "unanswered"];
 const tabLabel: Record<HomeTab, string> = { newest: "最新", hot: "热门", unanswered: "未回答" };
@@ -71,7 +72,8 @@ export function HomePage() {
                           {tag}
                         </Link>
                       ))}
-                      <span className="ml-auto text-xs text-slate-500">
+                      <FavoriteButton targetType="question" targetId={question.id} active={Boolean(question.isFavorited)} className="ml-auto" />
+                      <span className="text-xs text-slate-500">
                         {author?.name ?? "匿名"} · {formatDistanceToNow(new Date(question.createdAt), { addSuffix: true, locale: zhCN })}
                       </span>
                     </div>

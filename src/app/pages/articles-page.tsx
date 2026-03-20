@@ -5,6 +5,7 @@ import { zhCN } from "date-fns/locale";
 import { Link, useSearchParams } from "react-router";
 import { useQA } from "../store/qa-context";
 import { findUser } from "../store/selectors";
+import { FavoriteButton } from "../components/content/favorite-button";
 
 export function ArticlesPage() {
   const { state } = useQA();
@@ -74,6 +75,7 @@ export function ArticlesPage() {
                   <span className="inline-flex items-center gap-1"><Eye className="h-3 w-3" />{article.views}</span>
                   <span className="inline-flex items-center gap-1"><ThumbsUp className="h-3 w-3" />{article.likes}</span>
                   <span className="inline-flex items-center gap-1"><MessageSquare className="h-3 w-3" />{article.comments}</span>
+                  <FavoriteButton targetType="article" targetId={article.id} active={Boolean(article.isFavorited)} />
                 </div>
               </div>
             </article>

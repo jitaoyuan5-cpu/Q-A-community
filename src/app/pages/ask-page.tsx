@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router";
 import { ArrowLeft, X } from "lucide-react";
 import { useQA } from "../store/qa-context";
 import { validateQuestionDraft } from "../store/qa-reducer";
+import { MarkdownEditor } from "../components/content/markdown-editor";
 
 const suggestedTags = ["React", "JavaScript", "TypeScript", "Node.js", "CSS", "Next.js", "Tailwind CSS", "数据库"];
 
@@ -48,7 +49,7 @@ export function AskPage() {
 
           <div>
             <label htmlFor="content" className="mb-2 block text-sm font-medium">问题详情</label>
-            <textarea id="content" value={content} onChange={(event) => setContent(event.target.value)} className="min-h-48 w-full rounded-lg border border-slate-200 p-3 outline-none ring-blue-500 focus:ring-2" placeholder="请描述问题背景、报错信息和你尝试过的方法" />
+            <MarkdownEditor textareaId="content" value={content} onChange={setContent} placeholder="请描述问题背景、报错信息和你尝试过的方法" />
           </div>
 
           <div>

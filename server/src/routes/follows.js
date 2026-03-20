@@ -20,7 +20,7 @@ router.get(
        JOIN users u ON u.id = q.author_id
        LEFT JOIN question_tags qt ON qt.question_id = q.id
        LEFT JOIN tags t ON t.id = qt.tag_id
-       WHERE f.user_id = ? ${onlyNew ? "AND f.has_new_answers = 1" : ""}
+       WHERE f.user_id = ? AND q.is_hidden = 0 ${onlyNew ? "AND f.has_new_answers = 1" : ""}
        GROUP BY f.id, q.id, u.id
        ORDER BY f.has_new_answers DESC, q.updated_at DESC`,
       [req.user.userId],
@@ -46,6 +46,8 @@ router.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     const questionId = Number(req.params.questionId);
+    const [questionRows] = await pool.query("SELECT id FROM questions WHERE id = ? AND is_hidden = 0 LIMIT 1", [questionId]);
+    if (!questionRows.length) return res.status(404).json({ message: "Question not found" });
     const [rows] = await pool.query("SELECT id FROM follows WHERE user_id = ? AND question_id = ? LIMIT 1", [req.user.userId, questionId]);
     if (rows.length) {
       await pool.query("DELETE FROM follows WHERE id = ?", [rows[0].id]);

@@ -45,7 +45,7 @@ router.post(
     res.status(201).json({
       accessToken,
       refreshToken,
-      user: { id: userId, email: payload.email, name: payload.name, avatar: "", reputation: 0 },
+      user: { id: userId, email: payload.email, name: payload.name, avatar: "", reputation: 0, role: "user" },
     });
   }),
 );
@@ -54,7 +54,7 @@ router.post(
   "/login",
   asyncHandler(async (req, res) => {
     const payload = loginSchema.parse(req.body);
-    const [rows] = await pool.query("SELECT id, email, name, avatar, reputation, password_hash FROM users WHERE email = ? LIMIT 1", [payload.email]);
+    const [rows] = await pool.query("SELECT id, email, name, avatar, reputation, role, password_hash FROM users WHERE email = ? LIMIT 1", [payload.email]);
     const user = rows[0];
     if (!user) throw new ApiError(401, "Invalid credentials");
 
@@ -69,7 +69,7 @@ router.post(
     res.json({
       accessToken,
       refreshToken,
-      user: { id: user.id, email: user.email, name: user.name, avatar: user.avatar, reputation: user.reputation },
+      user: { id: user.id, email: user.email, name: user.name, avatar: user.avatar, reputation: user.reputation, role: user.role },
     });
   }),
 );
@@ -122,7 +122,7 @@ router.get(
   requireAuth,
   asyncHandler(async (req, res) => {
     const [rows] = await pool.query(
-      "SELECT id, email, name, avatar, reputation, bio, location, website, created_at FROM users WHERE id = ? LIMIT 1",
+      "SELECT id, email, name, avatar, reputation, bio, location, website, role, created_at FROM users WHERE id = ? LIMIT 1",
       [req.user.userId],
     );
     if (!rows.length) throw new ApiError(404, "User not found");

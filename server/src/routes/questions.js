@@ -23,6 +23,7 @@ router.get(
       where.push("(q.title LIKE ? OR q.content LIKE ?)");
       args.push(`%${q}%`, `%${q}%`);
     }
+    where.push("q.is_hidden = 0");
     if (tab === "unanswered") {
       where.push("q.answers_count = 0");
     }
@@ -41,19 +42,21 @@ router.get(
       SELECT q.id, q.title, q.content, q.views, q.votes, q.answers_count, q.created_at, q.updated_at,
              u.id AS author_id, u.name AS author_name, u.avatar AS author_avatar, u.reputation AS author_reputation,
              GROUP_CONCAT(DISTINCT t.name) AS tag_names,
-             ${req.user ? "MAX(CASE WHEN f.user_id IS NULL THEN 0 ELSE 1 END) AS is_followed" : "0 AS is_followed"}
+             ${req.user ? "MAX(CASE WHEN f.user_id IS NULL THEN 0 ELSE 1 END) AS is_followed" : "0 AS is_followed"},
+             ${req.user ? "MAX(CASE WHEN fav.id IS NULL THEN 0 ELSE 1 END) AS is_favorited" : "0 AS is_favorited"}
       FROM questions q
       JOIN users u ON u.id = q.author_id
       LEFT JOIN question_tags qt ON qt.question_id = q.id
       LEFT JOIN tags t ON t.id = qt.tag_id
       ${req.user ? "LEFT JOIN follows f ON f.question_id = q.id AND f.user_id = ?" : ""}
+      ${req.user ? "LEFT JOIN favorites fav ON fav.target_type = 'question' AND fav.target_id = q.id AND fav.user_id = ?" : ""}
       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
       GROUP BY q.id, u.id
       ORDER BY ${orderBy}
       LIMIT 100
     `;
 
-    const queryArgs = req.user ? [req.user.userId, ...args] : args;
+    const queryArgs = req.user ? [req.user.userId, req.user.userId, ...args] : args;
     const [rows] = await pool.query(sql, queryArgs);
 
     res.json(
@@ -67,6 +70,7 @@ router.get(
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         isFollowed: Boolean(row.is_followed),
+        isFavorited: Boolean(row.is_favorited),
         author: {
           id: row.author_id,
           name: row.author_name,
@@ -93,15 +97,17 @@ router.get(
       `SELECT q.id, q.title, q.content, q.views, q.votes, q.answers_count, q.created_at, q.updated_at,
               u.id AS author_id, u.name AS author_name, u.avatar AS author_avatar, u.reputation AS author_reputation,
               GROUP_CONCAT(DISTINCT t.name) AS tag_names,
-              ${req.user ? "MAX(CASE WHEN f.user_id IS NULL THEN 0 ELSE 1 END) AS is_followed" : "0 AS is_followed"}
+              ${req.user ? "MAX(CASE WHEN f.user_id IS NULL THEN 0 ELSE 1 END) AS is_followed" : "0 AS is_followed"},
+              ${req.user ? "MAX(CASE WHEN fav.id IS NULL THEN 0 ELSE 1 END) AS is_favorited" : "0 AS is_favorited"}
        FROM questions q
        JOIN users u ON u.id = q.author_id
        LEFT JOIN question_tags qt ON qt.question_id = q.id
        LEFT JOIN tags t ON t.id = qt.tag_id
        ${req.user ? "LEFT JOIN follows f ON f.question_id = q.id AND f.user_id = ?" : ""}
-       WHERE q.id = ?
+       ${req.user ? "LEFT JOIN favorites fav ON fav.target_type = 'question' AND fav.target_id = q.id AND fav.user_id = ?" : ""}
+       WHERE q.id = ? AND q.is_hidden = 0
        GROUP BY q.id, u.id`,
-      req.user ? [req.user.userId, id] : [id],
+      req.user ? [req.user.userId, req.user.userId, id] : [id],
     );
 
     if (!questions.length) return res.status(404).json({ message: "Question not found" });
@@ -111,7 +117,7 @@ router.get(
               u.id AS author_id, u.name AS author_name, u.avatar AS author_avatar, u.reputation AS author_reputation
        FROM answers a
        JOIN users u ON u.id = a.author_id
-       WHERE a.question_id = ?
+       WHERE a.question_id = ? AND a.is_hidden = 0
        ORDER BY a.is_accepted DESC, a.votes DESC, a.created_at DESC`,
       [id],
     );
@@ -127,6 +133,7 @@ router.get(
         createdAt: questions[0].created_at,
         updatedAt: questions[0].updated_at,
         isFollowed: Boolean(questions[0].is_followed),
+        isFavorited: Boolean(questions[0].is_favorited),
         author: {
           id: questions[0].author_id,
           name: questions[0].author_name,

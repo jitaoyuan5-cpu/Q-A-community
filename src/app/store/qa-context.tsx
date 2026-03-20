@@ -3,7 +3,17 @@ import { createInitialState } from "../data/initial-state";
 import { apiRequest } from "../api/client";
 import { useAuth } from "../auth-context";
 import { qaReducer } from "./qa-reducer";
-import type { Answer, Article, QAState, Question, RemoteJob, Topic, User } from "../types";
+import type {
+  Answer,
+  Article,
+  FavoriteRecord,
+  NotificationRecord,
+  QAState,
+  Question,
+  RemoteJob,
+  Topic,
+  User,
+} from "../types";
 
 type QAActions = {
   addQuestion: (title: string, content: string, tags: string[]) => Promise<string | null>;
@@ -12,9 +22,11 @@ type QAActions = {
   voteAnswer: (answerId: string, delta: 1 | -1) => Promise<void>;
   acceptAnswer: (answerId: string) => Promise<void>;
   toggleFollowQuestion: (questionId: string) => Promise<void>;
+  toggleFavorite: (targetType: "question" | "article", targetId: string) => Promise<void>;
   markQuestionViewed: (questionId: string) => Promise<void>;
   markFollowSeen: (questionId: string) => Promise<void>;
   refreshAll: () => Promise<void>;
+  refreshNotifications: () => Promise<void>;
 };
 
 const QAContext = createContext<{ state: QAState; actions: QAActions } | null>(null);
@@ -30,6 +42,8 @@ const createApiInitialState = (): QAState => {
     remoteJobs: [],
     articles: [],
     follows: [],
+    favorites: [],
+    notifications: [],
     voteRecord: {},
     idCounters: { question: 1, answer: 1 },
   };
@@ -52,6 +66,7 @@ const mapQuestion = (row: any): Question => ({
   answers: row.answers ?? row.answers_count ?? 0,
   createdAt: row.createdAt ?? row.created_at,
   updatedAt: row.updatedAt ?? row.updated_at,
+  isFavorited: Boolean(row.isFavorited ?? row.is_favorited),
 });
 
 const mapAnswer = (row: any): Answer => ({
@@ -63,6 +78,34 @@ const mapAnswer = (row: any): Answer => ({
   isAccepted: Boolean(row.isAccepted ?? row.is_accepted),
   createdAt: row.createdAt ?? row.created_at,
   updatedAt: row.updatedAt ?? row.updated_at,
+});
+
+const mapFavorite = (row: any): FavoriteRecord => ({
+  id: String(row.id),
+  targetType: row.targetType ?? row.target_type,
+  targetId: String(row.targetId ?? row.target_id),
+  title: row.title,
+  createdAt: row.createdAt ?? row.created_at,
+});
+
+const mapNotification = (row: any): NotificationRecord => ({
+  id: String(row.id),
+  type: row.type,
+  targetType: row.targetType ?? row.target_type,
+  targetId: String(row.targetId ?? row.target_id),
+  title: row.title,
+  body: row.body || "",
+  link: row.link,
+  isRead: Boolean(row.isRead ?? row.is_read),
+  createdAt: row.createdAt ?? row.created_at,
+  readAt: row.readAt ?? row.read_at ?? null,
+  actor: row.actor
+    ? {
+        id: String(row.actor.id),
+        name: row.actor.name,
+        avatar: row.actor.avatar,
+      }
+    : null,
 });
 
 function TestQAProvider({ children }: { children: React.ReactNode }) {
@@ -81,9 +124,11 @@ function TestQAProvider({ children }: { children: React.ReactNode }) {
       voteAnswer: async (answerId, delta) => dispatch({ type: "TOGGLE_VOTE", payload: { target: "answer", id: answerId, delta } }),
       acceptAnswer: async (answerId) => dispatch({ type: "ACCEPT_ANSWER", payload: { answerId } }),
       toggleFollowQuestion: async (questionId) => dispatch({ type: "TOGGLE_FOLLOW_QUESTION", payload: { questionId } }),
+      toggleFavorite: async () => undefined,
       markQuestionViewed: async (questionId) => dispatch({ type: "MARK_QUESTION_VIEWED", payload: { questionId } }),
       markFollowSeen: async (questionId) => dispatch({ type: "MARK_FOLLOW_SEEN", payload: { questionId } }),
       refreshAll: async () => undefined,
+      refreshNotifications: async () => undefined,
     }),
     [state.idCounters.question],
   );
@@ -98,13 +143,25 @@ function ApiQAProvider({ children }: { children: React.ReactNode }) {
     currentUserId: user ? String(user.id) : "",
   }));
 
+  const refreshNotifications = async () => {
+    if (!user) {
+      setState((prev) => ({ ...prev, notifications: [] }));
+      return;
+    }
+    const notificationRes = await apiRequest<{ unreadCount: number; items: any[] }>("/notifications").catch(() => ({ unreadCount: 0, items: [] }));
+    setState((prev) => ({ ...prev, notifications: notificationRes.items.map(mapNotification) }));
+  };
+
   const refreshAll = async () => {
-    const [questionsRows, topicsRows, jobsRows, articlesRows, tagsRows] = await Promise.all([
+    const [questionsRows, topicsRows, jobsRows, articlesRows, tagsRows, favoritesRows, followsRows, notificationRes] = await Promise.all([
       apiRequest<any[]>("/questions?tab=newest").catch(() => []),
       apiRequest<any[]>("/meta/topics").catch(() => []),
       apiRequest<any[]>("/meta/jobs").catch(() => []),
       apiRequest<any[]>("/meta/articles").catch(() => []),
       apiRequest<any[]>("/meta/tags").catch(() => []),
+      user ? apiRequest<any[]>("/favorites").catch(() => []) : Promise.resolve([]),
+      user ? apiRequest<any[]>("/follows").catch(() => []) : Promise.resolve([]),
+      user ? apiRequest<{ unreadCount: number; items: any[] }>("/notifications").catch(() => ({ unreadCount: 0, items: [] })) : Promise.resolve({ unreadCount: 0, items: [] }),
     ]);
 
     const usersFromQuestions: User[] = questionsRows.map((q) => ({
@@ -120,8 +177,6 @@ function ApiQAProvider({ children }: { children: React.ReactNode }) {
       avatar: a.author.avatar,
       reputation: 0,
     }));
-
-    const followsRows = user ? await apiRequest<any[]>("/follows").catch(() => []) : [];
 
     const questions = questionsRows.map(mapQuestion);
     const follows = followsRows.map((row) => ({
@@ -141,19 +196,53 @@ function ApiQAProvider({ children }: { children: React.ReactNode }) {
       answers: row.answers,
       createdAt: row.updatedAt,
       updatedAt: row.updatedAt,
+      isFavorited: favoritesRows.some((favorite) => favorite.targetType === "question" && String(favorite.targetId) === String(row.questionId)),
     }));
 
     setState((prev) => {
       const nextQuestions = [...questions, ...followQuestions.filter((fq) => !questions.some((q) => q.id === fq.id))];
       return {
         ...prev,
-        users: upsertUsers(prev.users, [...usersFromQuestions, ...usersFromArticles, ...(user ? [{ id: String(user.id), name: user.name, avatar: user.avatar || "", reputation: user.reputation || 0 }] : [])]),
+        users: upsertUsers(
+          prev.users,
+          [
+            ...usersFromQuestions,
+            ...usersFromArticles,
+            ...(user
+              ? [{
+                  id: String(user.id),
+                  name: user.name,
+                  avatar: user.avatar || "",
+                  reputation: user.reputation || 0,
+                  role: user.role,
+                  bio: user.bio,
+                  location: user.location,
+                  website: user.website,
+                }]
+              : []),
+          ],
+        ),
         currentUserId: user ? String(user.id) : "",
         questions: nextQuestions,
         topics: topicsRows.map((row): Topic => ({ id: String(row.id), title: row.title, description: row.description, category: row.category, trend: row.trend, posts: row.posts, views: row.views })),
         remoteJobs: jobsRows.map((row): RemoteJob => ({ id: String(row.id), title: row.title, company: row.company, location: row.location, region: row.region, salaryMin: row.salary_min, salaryMax: row.salary_max, type: row.type, skills: row.skills || [], postedAt: row.posted_at })),
-        articles: articlesRows.map((row): Article => ({ id: String(row.id), title: row.title, excerpt: row.excerpt, content: row.content ?? row.excerpt, authorId: String(row.author.id), cover: row.cover, tags: row.tags || [], views: row.views, likes: row.likes, comments: row.comments, publishedAt: row.publishedAt })),
+        articles: articlesRows.map((row): Article => ({
+          id: String(row.id),
+          title: row.title,
+          excerpt: row.excerpt,
+          content: row.content ?? row.excerpt,
+          authorId: String(row.author.id),
+          cover: row.cover,
+          tags: row.tags || [],
+          views: row.views,
+          likes: row.likes,
+          comments: row.comments,
+          publishedAt: row.publishedAt,
+          isFavorited: Boolean(row.isFavorited),
+        })),
+        favorites: favoritesRows.map(mapFavorite),
         follows,
+        notifications: notificationRes.items.map(mapNotification),
         answers: prev.answers.filter((answer) => nextQuestions.some((question) => question.id === answer.questionId)),
       };
     });
@@ -169,6 +258,21 @@ function ApiQAProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     refreshAll().catch(() => undefined);
   }, [user?.id]);
+
+  const syncQuestionDetail = async (questionId: number) => {
+    const detail = await apiRequest<any>(`/questions/${questionId}?trackView=0`);
+    setState((prev) => ({
+      ...prev,
+      users: upsertUsers(prev.users, [
+        { id: String(detail.question.author.id), name: detail.question.author.name, avatar: detail.question.author.avatar, reputation: detail.question.author.reputation },
+        ...detail.answers.map((a: any) => ({ id: String(a.author.id), name: a.author.name, avatar: a.author.avatar, reputation: a.author.reputation })),
+      ]),
+      questions: prev.questions.some((q) => q.id === String(detail.question.id))
+        ? prev.questions.map((q) => (q.id === String(detail.question.id) ? mapQuestion(detail.question) : q))
+        : [mapQuestion(detail.question), ...prev.questions],
+      answers: [...prev.answers.filter((a) => a.questionId !== String(detail.question.id)), ...detail.answers.map(mapAnswer)],
+    }));
+  };
 
   const actions: QAActions = {
     addQuestion: async (title, content, tags) => {
@@ -187,16 +291,7 @@ function ApiQAProvider({ children }: { children: React.ReactNode }) {
         method: "POST",
         body: JSON.stringify({ questionId: id, content }),
       });
-      const detail = await apiRequest<any>(`/questions/${id}?trackView=0`);
-      setState((prev) => ({
-        ...prev,
-        users: upsertUsers(prev.users, [
-          { id: String(detail.question.author.id), name: detail.question.author.name, avatar: detail.question.author.avatar, reputation: detail.question.author.reputation },
-          ...detail.answers.map((a: any) => ({ id: String(a.author.id), name: a.author.name, avatar: a.author.avatar, reputation: a.author.reputation })),
-        ]),
-        questions: prev.questions.map((q) => (q.id === String(detail.question.id) ? mapQuestion(detail.question) : q)),
-        answers: [...prev.answers.filter((a) => a.questionId !== String(detail.question.id)), ...detail.answers.map(mapAnswer)],
-      }));
+      await syncQuestionDetail(id);
       await refreshAll();
     },
     voteQuestion: async (questionId, delta) => {
@@ -212,10 +307,7 @@ function ApiQAProvider({ children }: { children: React.ReactNode }) {
       const answer = state.answers.find((a) => a.id === answerId);
       if (answer) {
         const qid = Number(answer.questionId.replace(/\D/g, ""));
-        if (qid) {
-          const detail = await apiRequest<any>(`/questions/${qid}?trackView=0`);
-          setState((prev) => ({ ...prev, answers: [...prev.answers.filter((a) => a.questionId !== String(detail.question.id)), ...detail.answers.map(mapAnswer)] }));
-        }
+        if (qid) await syncQuestionDetail(qid);
       }
       await refreshAll();
     },
@@ -226,11 +318,9 @@ function ApiQAProvider({ children }: { children: React.ReactNode }) {
       const answer = state.answers.find((a) => a.id === answerId);
       if (answer) {
         const qid = Number(answer.questionId.replace(/\D/g, ""));
-        if (qid) {
-          const detail = await apiRequest<any>(`/questions/${qid}?trackView=0`);
-          setState((prev) => ({ ...prev, answers: [...prev.answers.filter((a) => a.questionId !== String(detail.question.id)), ...detail.answers.map(mapAnswer)] }));
-        }
+        if (qid) await syncQuestionDetail(qid);
       }
+      await refreshAll();
     },
     toggleFollowQuestion: async (questionId) => {
       const id = Number(questionId.replace(/\D/g, ""));
@@ -238,21 +328,28 @@ function ApiQAProvider({ children }: { children: React.ReactNode }) {
       await apiRequest(`/follows/toggle/${id}`, { method: "POST" });
       await refreshAll();
     },
+    toggleFavorite: async (targetType, targetId) => {
+      const id = Number(targetId.replace(/\D/g, ""));
+      if (!id) return;
+      await apiRequest("/favorites/toggle", { method: "POST", body: JSON.stringify({ targetType, targetId: id }) });
+      await refreshAll();
+    },
     markQuestionViewed: async (questionId) => {
       const id = Number(questionId.replace(/\D/g, ""));
       if (!id) return;
-      const detail = await apiRequest<any>(`/questions/${id}`);
-      setState((prev) => ({
-        ...prev,
-        users: upsertUsers(prev.users, [
-          { id: String(detail.question.author.id), name: detail.question.author.name, avatar: detail.question.author.avatar, reputation: detail.question.author.reputation },
-          ...detail.answers.map((a: any) => ({ id: String(a.author.id), name: a.author.name, avatar: a.author.avatar, reputation: a.author.reputation })),
-        ]),
-        questions: prev.questions.some((q) => q.id === String(detail.question.id))
-          ? prev.questions.map((q) => (q.id === String(detail.question.id) ? mapQuestion(detail.question) : q))
-          : [mapQuestion(detail.question), ...prev.questions],
-        answers: [...prev.answers.filter((a) => a.questionId !== String(detail.question.id)), ...detail.answers.map(mapAnswer)],
-      }));
+      await apiRequest<any>(`/questions/${id}`).then(async (detail) => {
+        setState((prev) => ({
+          ...prev,
+          users: upsertUsers(prev.users, [
+            { id: String(detail.question.author.id), name: detail.question.author.name, avatar: detail.question.author.avatar, reputation: detail.question.author.reputation },
+            ...detail.answers.map((a: any) => ({ id: String(a.author.id), name: a.author.name, avatar: a.author.avatar, reputation: a.author.reputation })),
+          ]),
+          questions: prev.questions.some((q) => q.id === String(detail.question.id))
+            ? prev.questions.map((q) => (q.id === String(detail.question.id) ? mapQuestion(detail.question) : q))
+            : [mapQuestion(detail.question), ...prev.questions],
+          answers: [...prev.answers.filter((a) => a.questionId !== String(detail.question.id)), ...detail.answers.map(mapAnswer)],
+        }));
+      });
     },
     markFollowSeen: async (questionId) => {
       const id = Number(questionId.replace(/\D/g, ""));
@@ -261,6 +358,7 @@ function ApiQAProvider({ children }: { children: React.ReactNode }) {
       setState((prev) => ({ ...prev, follows: prev.follows.map((f) => (f.questionId === questionId ? { ...f, hasNewAnswers: false } : f)) }));
     },
     refreshAll,
+    refreshNotifications,
   };
 
   return <QAContext.Provider value={{ state, actions }}>{children}</QAContext.Provider>;

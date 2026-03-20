@@ -1,8 +1,9 @@
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router";
-import { BookMarked, FileText, Flame, Globe, HelpCircle, History, Home, Menu, MessageSquare, PlusCircle, Search, User, X } from "lucide-react";
+import { Bell, BookHeart, BookMarked, FileText, Flame, Globe, HelpCircle, History, Home, Menu, MessageSquare, PlusCircle, Search, Shield, User, X } from "lucide-react";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { apiRequest } from "../api/client";
 import { useAuth } from "../auth-context";
+import { useQA } from "../store/qa-context";
 
 const navItems = [
   { path: "/", icon: Home, label: "综合推荐" },
@@ -11,6 +12,7 @@ const navItems = [
   { path: "/articles", icon: FileText, label: "专栏文章" },
   { path: "/questions", icon: HelpCircle, label: "提问区域" },
   { path: "/following", icon: BookMarked, label: "关注的问题" },
+  { path: "/favorites", icon: BookHeart, label: "我的收藏" },
 ];
 
 type Suggestion = { value: string; type: string };
@@ -21,12 +23,14 @@ export function RootLayout() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { user, logout } = useAuth();
+  const { state, actions } = useQA();
   const [navOpen, setNavOpen] = useState(false);
   const [searchText, setSearchText] = useState(params.get("q") ?? "");
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [history, setHistory] = useState<SearchHistoryItem[]>([]);
   const [panelOpen, setPanelOpen] = useState(false);
   const searchPanelRef = useRef<HTMLFormElement | null>(null);
+  const [notificationOpen, setNotificationOpen] = useState(false);
 
   useEffect(() => {
     const q = searchText.trim();
@@ -74,6 +78,27 @@ export function RootLayout() {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [panelOpen]);
+
+  useEffect(() => {
+    if (!user) return;
+    actions.refreshNotifications().catch(() => undefined);
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const handleFocus = () => {
+      actions.refreshNotifications().catch(() => undefined);
+    };
+
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user || !notificationOpen) return;
+    actions.refreshNotifications().catch(() => undefined);
+  }, [notificationOpen, user?.id]);
 
   const submitSearch = (event?: FormEvent) => {
     event?.preventDefault();
@@ -159,7 +184,31 @@ export function RootLayout() {
 
           {user ? (
             <div className="hidden items-center gap-2 md:flex">
+              <div className="relative">
+                <button aria-label="打开消息通知" className="relative rounded-lg border border-slate-200 px-3 py-2 text-sm" onClick={() => setNotificationOpen((current) => !current)}>
+                  <Bell className="h-4 w-4" />
+                  {state.notifications.some((item) => !item.isRead) && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" />}
+                </button>
+                {notificationOpen && (
+                  <div className="absolute right-0 top-12 z-30 w-80 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-sm font-medium">消息通知</p>
+                      <Link to="/notifications" onClick={() => setNotificationOpen(false)} className="text-xs text-blue-600">查看全部</Link>
+                    </div>
+                    <div className="space-y-2">
+                      {state.notifications.slice(0, 5).map((item) => (
+                        <Link key={item.id} to={item.link} onClick={() => setNotificationOpen(false)} className={`block rounded-xl p-3 text-sm ${item.isRead ? "bg-slate-50" : "bg-blue-50"}`}>
+                          <p className="font-medium text-slate-900">{item.title}</p>
+                          <p className="mt-1 text-xs text-slate-500">{item.body}</p>
+                        </Link>
+                      ))}
+                      {state.notifications.length === 0 && <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">暂无通知</p>}
+                    </div>
+                  </div>
+                )}
+              </div>
               <Link to={`/profile/${user.id}`} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">{user.name}</Link>
+              {user.role === "admin" && <Link to="/admin/reports" className="rounded-lg border border-slate-200 px-3 py-2 text-sm">审核台</Link>}
               <button
                 className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 onClick={() => {
@@ -199,9 +248,16 @@ export function RootLayout() {
               );
             })}
             {user && (
-              <Link to={`/profile/${user.id}`} className="mb-1 flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-                <User className="h-4 w-4" />个人主页
-              </Link>
+              <>
+                <Link to={`/profile/${user.id}`} className="mb-1 flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                  <User className="h-4 w-4" />个人主页
+                </Link>
+                {user.role === "admin" && (
+                  <Link to="/admin/reports" className="mb-1 flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                    <Shield className="h-4 w-4" />举报审核
+                  </Link>
+                )}
+              </>
             )}
           </nav>
         </aside>

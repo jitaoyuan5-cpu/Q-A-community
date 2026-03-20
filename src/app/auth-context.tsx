@@ -7,6 +7,7 @@ type AuthUser = {
   name: string;
   avatar?: string;
   reputation?: number;
+  role?: "user" | "admin";
   bio?: string;
   location?: string;
   website?: string;
@@ -31,6 +32,7 @@ const defaultTestUser: AuthUser = {
   name: "张三",
   avatar: "https://i.pravatar.cc/80?img=1",
   reputation: 2850,
+  role: "admin",
 };
 
 const getTestUser = (): AuthUser | null => {

@@ -17,7 +17,7 @@ router.get(
 
     if (types.includes("questions")) {
       const [rows] = await pool.query(
-        "SELECT id, title, content, votes, views FROM questions WHERE title LIKE ? OR content LIKE ? ORDER BY votes DESC, views DESC LIMIT 10",
+        "SELECT id, title, content, votes, views FROM questions WHERE is_hidden = 0 AND (title LIKE ? OR content LIKE ?) ORDER BY votes DESC, views DESC LIMIT 10",
         [`%${query}%`, `%${query}%`],
       );
       result.questions = rows;
@@ -25,7 +25,7 @@ router.get(
 
     if (types.includes("articles")) {
       const [rows] = await pool.query(
-        "SELECT id, title, excerpt, views, likes, comments_count FROM articles WHERE title LIKE ? OR excerpt LIKE ? ORDER BY views DESC LIMIT 10",
+        "SELECT id, title, excerpt, views, likes, comments_count FROM articles WHERE is_hidden = 0 AND (title LIKE ? OR excerpt LIKE ?) ORDER BY views DESC LIMIT 10",
         [`%${query}%`, `%${query}%`],
       );
       result.articles = rows;
@@ -53,7 +53,7 @@ router.get(
     const query = String(req.query.q || "").trim();
     if (!query) return res.json([]);
 
-    const [qRows] = await pool.query("SELECT title AS value, 'question' AS type FROM questions WHERE title LIKE ? LIMIT 5", [`%${query}%`]);
+    const [qRows] = await pool.query("SELECT title AS value, 'question' AS type FROM questions WHERE is_hidden = 0 AND title LIKE ? LIMIT 5", [`%${query}%`]);
     const [tRows] = await pool.query("SELECT name AS value, 'tag' AS type FROM tags WHERE name LIKE ? LIMIT 5", [`%${query}%`]);
     const [uRows] = await pool.query("SELECT name AS value, 'user' AS type FROM users WHERE name LIKE ? LIMIT 5", [`%${query}%`]);
     res.json([...qRows, ...tRows, ...uRows].slice(0, 12));

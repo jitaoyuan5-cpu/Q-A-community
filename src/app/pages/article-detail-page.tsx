@@ -1,9 +1,12 @@
-import { Clock, Eye, MessageSquare, ThumbsUp } from "lucide-react";
+import { Clock, Eye, MessageSquare, Share2, ThumbsUp } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { Link, useParams } from "react-router";
 import { useQA } from "../store/qa-context";
 import { findUser } from "../store/selectors";
+import { MarkdownRenderer } from "../components/content/markdown-renderer";
+import { FavoriteButton } from "../components/content/favorite-button";
+import { ReportButton } from "../components/content/report-button";
 
 export function ArticleDetailPage() {
   const { id } = useParams();
@@ -21,6 +24,7 @@ export function ArticleDetailPage() {
   }
 
   const author = findUser(state, article.authorId);
+  const canonicalUrl = `${window.location.origin}/articles/${article.id}`;
 
   return (
     <article className="mx-auto max-w-4xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -36,6 +40,22 @@ export function ArticleDetailPage() {
           <span className="inline-flex items-center gap-1"><Eye className="h-4 w-4" />{article.views}</span>
           <span className="inline-flex items-center gap-1"><ThumbsUp className="h-4 w-4" />{article.likes}</span>
           <span className="inline-flex items-center gap-1"><MessageSquare className="h-4 w-4" />{article.comments}</span>
+          <FavoriteButton targetType="article" targetId={article.id} active={Boolean(article.isFavorited)} />
+          <button
+            type="button"
+            onClick={async () => {
+              if (navigator.share) {
+                await navigator.share({ title: article.title, url: canonicalUrl }).catch(() => undefined);
+                return;
+              }
+              await navigator.clipboard.writeText(canonicalUrl);
+            }}
+            className="inline-flex items-center rounded-lg border border-slate-200 px-3 py-1 text-xs text-slate-600"
+          >
+            <Share2 className="mr-1 h-3.5 w-3.5" />
+            分享
+          </button>
+          <ReportButton targetType="article" targetId={article.id} />
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -46,8 +66,8 @@ export function ArticleDetailPage() {
           ))}
         </div>
 
-        <div className="mt-8 whitespace-pre-wrap text-[15px] leading-8 text-slate-700">
-          {article.content || article.excerpt}
+        <div className="mt-8 text-[15px] leading-8 text-slate-700">
+          <MarkdownRenderer content={article.content || article.excerpt} />
         </div>
       </div>
     </article>

@@ -6,6 +6,7 @@
 3. Run migrations: `npm run migrate`
 4. Seed sample data: `npm run seed`
 5. Start API: `npm run dev`
+6. When starting from the repo root with `npm run server:dev`, the wrapper script now checks whether port `4000` is already occupied and fails fast instead of silently leaving you on a stale backend
 
 ## Test
 - Integration tests with mocked DB layer: `npm run test`
@@ -20,3 +21,7 @@
 - Search: `/api/search`, `/api/search/suggest`, `/api/search/history`
 - Users/Profile: `/api/users/:id`, `/api/users/me`
 - Meta: `/api/meta/topics`, `/api/meta/jobs`, `/api/meta/articles`, `/api/meta/tags`
+- Uploads: `/api/uploads`
+- Favorites: `/api/favorites`
+- Notifications: `/api/notifications`
+- Reports/Admin: `/api/reports`, `/api/admin/reports`

@@ -15,7 +15,10 @@ import { RegisterPage } from "./pages/register-page";
 import { SearchPage } from "./pages/search-page";
 import { ProfilePage } from "./pages/profile-page";
 import { ProfileEditPage } from "./pages/profile-edit-page";
-import { RequireAuth } from "./components/auth/require-auth";
+import { FavoritesPage } from "./pages/favorites-page";
+import { NotificationsPage } from "./pages/notifications-page";
+import { AdminReportsPage } from "./pages/admin-reports-page";
+import { RequireAdmin, RequireAuth } from "./components/auth/require-auth";
 
 function AskProtected() {
   return (
@@ -41,6 +44,30 @@ function ProfileEditProtected() {
   );
 }
 
+function FavoritesProtected() {
+  return (
+    <RequireAuth>
+      <FavoritesPage />
+    </RequireAuth>
+  );
+}
+
+function NotificationsProtected() {
+  return (
+    <RequireAuth>
+      <NotificationsPage />
+    </RequireAuth>
+  );
+}
+
+function AdminProtected() {
+  return (
+    <RequireAdmin>
+      <AdminReportsPage />
+    </RequireAdmin>
+  );
+}
+
 export const routeObjects = [
   {
     path: "/",
@@ -53,13 +80,16 @@ export const routeObjects = [
       { path: "articles/:id", Component: ArticleDetailPage },
       { path: "questions", Component: QuestionsPage },
       { path: "following", Component: FollowingProtected },
+      { path: "favorites", Component: FavoritesProtected },
       { path: "question/:id", Component: QuestionDetailPage },
       { path: "ask", Component: AskProtected },
       { path: "search", Component: SearchPage },
+      { path: "notifications", Component: NotificationsProtected },
       { path: "login", Component: LoginPage },
       { path: "register", Component: RegisterPage },
       { path: "profile/:id", Component: ProfilePage },
       { path: "profile/edit", Component: ProfileEditProtected },
+      { path: "admin/reports", Component: AdminProtected },
       { path: "*", Component: NotFoundPage },
     ],
   },

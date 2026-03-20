@@ -46,6 +46,20 @@ export const createInitialState = (): QAState => ({
   remoteJobs,
   articles,
   follows: [{ questionId: "q1", followedAt: "2026-03-17T10:00:00.000Z", hasNewAnswers: true }],
+  favorites: [
+    { id: "fav1", targetType: "question", targetId: "q1", title: "React 中 useState 和 useReducer 的区别是什么？", createdAt: "2026-03-17T10:05:00.000Z" },
+    { id: "fav2", targetType: "article", targetId: "a1", title: "深入理解 React Server Components", createdAt: "2026-03-17T10:06:00.000Z" },
+  ],
+  notifications: [
+    { id: "n1", type: "new_answer", targetType: "question", targetId: "q1", title: "你的问题收到了新回答", body: "React 中 useState 和 useReducer 的区别是什么？", link: "/question/q1", isRead: false, createdAt: "2026-03-17T11:20:00.000Z", actor: { id: "u3", name: "王五", avatar: "https://i.pravatar.cc/80?img=3" } },
+  ],
+  emailPreferences: {
+    emailEnabled: true,
+    notifyNewAnswer: true,
+    notifyNewComment: true,
+    notifyAnswerAccepted: true,
+    notifyFollowUpdate: true,
+  },
   voteRecord: {},
   idCounters: {
     question: 5,

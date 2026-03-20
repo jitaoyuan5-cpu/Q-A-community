@@ -5,6 +5,8 @@ export type HomeTab = "newest" | "hot" | "unanswered";
 export const findUser = (state: QAState, userId: string) => state.users.find((u) => u.id === userId);
 
 export const isFollowing = (state: QAState, questionId: string) => state.follows.some((f) => f.questionId === questionId);
+export const isFavorited = (state: QAState, targetType: "question" | "article", targetId: string) =>
+  state.favorites.some((f) => f.targetType === targetType && f.targetId === targetId);
 
 export const answersByQuestion = (state: QAState, questionId: string): Answer[] =>
   state.answers.filter((a) => a.questionId === questionId);
