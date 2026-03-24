@@ -18,6 +18,14 @@ import { ProfileEditPage } from "./pages/profile-edit-page";
 import { FavoritesPage } from "./pages/favorites-page";
 import { NotificationsPage } from "./pages/notifications-page";
 import { AdminReportsPage } from "./pages/admin-reports-page";
+import { AdminTutorialsPage } from "./pages/admin-tutorials-page";
+import { AssistantPage } from "./pages/assistant-page";
+import { TutorialDetailPage } from "./pages/tutorial-detail-page";
+import { TutorialsPage } from "./pages/tutorials-page";
+import { PlaygroundPage } from "./pages/playground-page";
+import { DevelopersPage } from "./pages/developers-page";
+import { DeveloperKeysPage } from "./pages/developer-keys-page";
+import { DeveloperDocsPage } from "./pages/developer-docs-page";
 import { RequireAdmin, RequireAuth } from "./components/auth/require-auth";
 
 function AskProtected() {
@@ -68,6 +76,30 @@ function AdminProtected() {
   );
 }
 
+function AdminTutorialsProtected() {
+  return (
+    <RequireAdmin>
+      <AdminTutorialsPage />
+    </RequireAdmin>
+  );
+}
+
+function AssistantProtected() {
+  return (
+    <RequireAuth>
+      <AssistantPage />
+    </RequireAuth>
+  );
+}
+
+function DeveloperKeysProtected() {
+  return (
+    <RequireAuth>
+      <DeveloperKeysPage />
+    </RequireAuth>
+  );
+}
+
 export const routeObjects = [
   {
     path: "/",
@@ -83,6 +115,13 @@ export const routeObjects = [
       { path: "favorites", Component: FavoritesProtected },
       { path: "question/:id", Component: QuestionDetailPage },
       { path: "ask", Component: AskProtected },
+      { path: "assistant", Component: AssistantProtected },
+      { path: "tutorials", Component: TutorialsPage },
+      { path: "tutorials/:id", Component: TutorialDetailPage },
+      { path: "playground", Component: PlaygroundPage },
+      { path: "developers", Component: DevelopersPage },
+      { path: "developers/keys", Component: DeveloperKeysProtected },
+      { path: "developers/docs", Component: DeveloperDocsPage },
       { path: "search", Component: SearchPage },
       { path: "notifications", Component: NotificationsProtected },
       { path: "login", Component: LoginPage },
@@ -90,6 +129,7 @@ export const routeObjects = [
       { path: "profile/:id", Component: ProfilePage },
       { path: "profile/edit", Component: ProfileEditProtected },
       { path: "admin/reports", Component: AdminProtected },
+      { path: "admin/tutorials", Component: AdminTutorialsProtected },
       { path: "*", Component: NotFoundPage },
     ],
   },

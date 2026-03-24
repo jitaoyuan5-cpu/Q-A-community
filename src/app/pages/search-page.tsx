@@ -31,7 +31,14 @@ export function SearchPage() {
 
   return (
     <section className="space-y-6">
-      <h1 className="text-2xl font-semibold">统一搜索：{q || "(空)"}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold">统一搜索：{q || "(空)"}</h1>
+        {q ? (
+          <Link to={`/assistant?q=${encodeURIComponent(q)}`} className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700">
+            交给 AI 助手分析
+          </Link>
+        ) : null}
+      </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-4">

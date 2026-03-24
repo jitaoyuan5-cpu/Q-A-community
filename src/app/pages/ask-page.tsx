@@ -105,6 +105,12 @@ export function AskPage() {
               <li>包含关键错误信息或代码片段</li>
               <li>标签尽量贴近技术主题</li>
             </ul>
+            <Link
+              to={`/assistant?q=${encodeURIComponent([title, content].filter(Boolean).join("\n").trim() || "帮我整理一个适合提问的问题描述")}`}
+              className="mt-3 inline-flex rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs text-blue-700"
+            >
+              先让 AI 助手帮我梳理问题
+            </Link>
           </aside>
 
           <div className="flex gap-3">

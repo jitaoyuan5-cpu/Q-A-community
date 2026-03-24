@@ -11,6 +11,7 @@ const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
   name: z.string().min(2).max(120),
+  preferredLocale: z.enum(["zh-CN", "en-US"]).optional(),
 });
 
 const loginSchema = z.object({
@@ -31,9 +32,10 @@ router.post(
     if (existsRows.length) throw new ApiError(409, "Email already exists");
 
     const passwordHash = await hashPassword(payload.password);
+    const preferredLocale = payload.preferredLocale || "zh-CN";
     const [insertResult] = await pool.query(
-      "INSERT INTO users (email, password_hash, name, avatar, reputation) VALUES (?, ?, ?, '', 0)",
-      [payload.email, passwordHash, payload.name],
+      "INSERT INTO users (email, password_hash, name, avatar, reputation, preferred_locale) VALUES (?, ?, ?, '', 0, ?)",
+      [payload.email, passwordHash, payload.name, preferredLocale],
     );
 
     const userId = insertResult.insertId;
@@ -45,7 +47,7 @@ router.post(
     res.status(201).json({
       accessToken,
       refreshToken,
-      user: { id: userId, email: payload.email, name: payload.name, avatar: "", reputation: 0, role: "user" },
+      user: { id: userId, email: payload.email, name: payload.name, avatar: "", reputation: 0, role: "user", preferredLocale },
     });
   }),
 );
@@ -54,7 +56,7 @@ router.post(
   "/login",
   asyncHandler(async (req, res) => {
     const payload = loginSchema.parse(req.body);
-    const [rows] = await pool.query("SELECT id, email, name, avatar, reputation, role, password_hash FROM users WHERE email = ? LIMIT 1", [payload.email]);
+    const [rows] = await pool.query("SELECT id, email, name, avatar, reputation, role, preferred_locale, password_hash FROM users WHERE email = ? LIMIT 1", [payload.email]);
     const user = rows[0];
     if (!user) throw new ApiError(401, "Invalid credentials");
 
@@ -69,7 +71,7 @@ router.post(
     res.json({
       accessToken,
       refreshToken,
-      user: { id: user.id, email: user.email, name: user.name, avatar: user.avatar, reputation: user.reputation, role: user.role },
+      user: { id: user.id, email: user.email, name: user.name, avatar: user.avatar, reputation: user.reputation, role: user.role, preferredLocale: user.preferred_locale },
     });
   }),
 );
@@ -122,11 +124,14 @@ router.get(
   requireAuth,
   asyncHandler(async (req, res) => {
     const [rows] = await pool.query(
-      "SELECT id, email, name, avatar, reputation, bio, location, website, role, created_at FROM users WHERE id = ? LIMIT 1",
+      "SELECT id, email, name, avatar, reputation, bio, location, website, role, preferred_locale, created_at FROM users WHERE id = ? LIMIT 1",
       [req.user.userId],
     );
     if (!rows.length) throw new ApiError(404, "User not found");
-    res.json(rows[0]);
+    res.json({
+      ...rows[0],
+      preferredLocale: rows[0].preferred_locale,
+    });
   }),
 );
 

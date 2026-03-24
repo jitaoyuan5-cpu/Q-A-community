@@ -16,10 +16,10 @@ export function FavoritesPage() {
         state.favorites.map((favorite) => (
           <Link
             key={favorite.id}
-            to={favorite.targetType === "question" ? `/question/${favorite.targetId}` : `/articles/${favorite.targetId}`}
+            to={favorite.targetType === "question" ? `/question/${favorite.targetId}` : favorite.targetType === "article" ? `/articles/${favorite.targetId}` : `/tutorials/${favorite.targetId}`}
             className="block rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
           >
-            <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">{favorite.targetType === "question" ? "问题" : "文章"}</p>
+            <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">{favorite.targetType === "question" ? "问题" : favorite.targetType === "article" ? "文章" : "教程"}</p>
             <h2 className="font-semibold text-slate-900">{favorite.title}</h2>
             <p className="mt-2 text-xs text-slate-500">收藏于 {new Date(favorite.createdAt).toLocaleString()}</p>
           </Link>

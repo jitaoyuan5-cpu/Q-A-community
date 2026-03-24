@@ -297,6 +297,14 @@ User (*) ----< (*) Question (following)
 | 注册页面 | /register | 用户注册 |
 | 用户主页 | /profile/:id | 用户信息、提问与回答 |
 | 编辑资料 | /profile/edit | 编辑个人资料 |
+| AI 助手 | /assistant | 基于站内内容的问答助手 |
+| 教程列表 | /tutorials | 视频教程与学习进度 |
+| 教程详情 | /tutorials/:id | 课程章节、嵌入视频、进度记录 |
+| 在线编程环境 | /playground | 浏览器内运行代码模板与分享 |
+| 开发者入口 | /developers | 开放平台说明与能力概览 |
+| API Key 管理 | /developers/keys | 创建与吊销只读 API Key |
+| OpenAPI 文档 | /developers/docs | 公共 API 文档与示例 |
+| 教程管理 | /admin/tutorials | 管理员教程 CRUD |
 | 404页面 | /* | 页面未找到 |
 
 ### 7.2 页面跳转流程
@@ -375,14 +383,22 @@ User (*) ----< (*) Question (following)
 - ✅ 收藏功能
 - ✅ 举报/审核
 
-### P3（扩展功能 - 长期计划）
-- 🔲 AI智能推荐
-- 🔲 实时聊天
-- 🔲 视频教程
-- 🔲 在线编程环境
-- 🔲 移动应用
-- 🔲 多语言支持
-- 🔲 API开放平台
+### P3（扩展功能 - 已按两波落地）
+- ✅ AI 问答助手
+- ✅ 问题页实时讨论
+- ✅ 视频教程
+- ✅ 在线编程环境
+- ✅ PWA 安装与离线壳
+- ✅ 多语言支持（简中 / 英文）
+- ✅ API 开放平台（只读 + API Key）
+
+### P3 当前落地说明
+- Web 第一波已实现：AI 助手、问题详情页即时讨论、教程页、Playground、多语言、PWA
+- 平台第二波已实现：开发者入口、API Key、自助吊销、OpenAPI 文档页、只读公共 API
+- AI 助手当前优先检索站内问题、答案、文章，再生成带引用的回复；默认本地模式，可切换 OpenAI-compatible provider
+- 视频教程当前采用站内课程页 + 外链/嵌入视频，不做站内视频托管
+- 在线编程环境当前为浏览器内沙箱，支持 HTML / JS / TS / React 模板与只读分享快照
+- 移动端当前按 PWA 交付，不包含原生 React Native App
 
 ---
 

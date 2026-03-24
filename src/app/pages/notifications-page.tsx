@@ -3,11 +3,13 @@ import { Link } from "react-router";
 import { apiRequest } from "../api/client";
 import { useQA } from "../store/qa-context";
 import type { NotificationRecord } from "../types";
+import { useI18n } from "../i18n";
 
 type NotificationResponse = { unreadCount: number; items: NotificationRecord[] };
 
 export function NotificationsPage() {
   const { actions } = useQA();
+  const { t } = useI18n();
   const [data, setData] = useState<NotificationResponse>({ unreadCount: 0, items: [] });
 
   const refresh = async () => {
@@ -23,8 +25,8 @@ export function NotificationsPage() {
     <section className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">消息通知</h1>
-          <p className="text-sm text-slate-600">未读 {data.unreadCount} 条</p>
+          <h1 className="text-2xl font-semibold">{t("notificationsTitle")}</h1>
+          <p className="text-sm text-slate-600">{t("notificationsUnread", { count: data.unreadCount })}</p>
         </div>
         <button
           type="button"
@@ -39,7 +41,7 @@ export function NotificationsPage() {
             }
           }}
         >
-          全部已读
+          {t("notificationsReadAll")}
         </button>
       </div>
       {data.items.map((item) => (
@@ -64,14 +66,14 @@ export function NotificationsPage() {
                   }
                 }}
               >
-                标记已读
+                {t("notificationsMarkRead")}
               </button>
             )}
           </div>
           <p className="mt-2 text-xs text-slate-500">{new Date(item.createdAt).toLocaleString()}</p>
         </Link>
       ))}
-      {data.items.length === 0 && <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-500">暂无通知。</div>}
+      {data.items.length === 0 && <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-500">{t("notificationsEmpty")}</div>}
     </section>
   );
 }

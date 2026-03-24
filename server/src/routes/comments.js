@@ -5,6 +5,7 @@ import { asyncHandler } from "../utils/http.js";
 import { requireAuth } from "../middleware/auth.js";
 import { createNotification, notificationTypes, shouldSendEmailForType } from "../utils/notifications.js";
 import { sendTemplatedEmail } from "../utils/mailer.js";
+import { tSystem } from "../utils/locale.js";
 
 const router = Router();
 
@@ -63,7 +64,7 @@ router.post(
     const payload = createSchema.parse(req.body);
     if (payload.targetType === "question") {
       const [targetRows] = await pool.query(
-        `SELECT q.id, q.title, q.author_id AS owner_id, u.email AS owner_email
+        `SELECT q.id, q.title, q.author_id AS owner_id, u.email AS owner_email, u.preferred_locale AS owner_locale
          FROM questions q
          JOIN users u ON u.id = q.author_id
          WHERE q.id = ? AND q.is_hidden = 0 LIMIT 1`,
@@ -77,21 +78,22 @@ router.post(
       );
       const owner = targetRows[0];
       if (owner.owner_id !== req.user.userId) {
+        const ownerLocale = owner.owner_locale || "zh-CN";
         await createNotification(pool, {
           userId: owner.owner_id,
           actorId: req.user.userId,
           type: notificationTypes.newComment,
           targetType: "comment",
           targetId: result.insertId,
-          title: "你的问题收到了新评论",
+          title: tSystem(ownerLocale, "notifications", "questionCommentTitle"),
           body: owner.title,
           link: `/question/${payload.targetId}`,
         });
         if (await shouldSendEmailForType(pool, owner.owner_id, notificationTypes.newComment)) {
           await sendTemplatedEmail({
             to: owner.owner_email,
-            subject: "问答社区：你的问题收到了新评论",
-            text: `问题《${owner.title}》收到了新评论，访问 /question/${payload.targetId} 查看。`,
+            subject: tSystem(ownerLocale, "emails", "questionCommentSubject"),
+            text: tSystem(ownerLocale, "emails", "questionCommentText", { title: owner.title, link: `/question/${payload.targetId}` }),
           });
         }
       }
@@ -99,7 +101,7 @@ router.post(
     }
 
     const [targetRows] = await pool.query(
-      `SELECT a.id, a.question_id, a.author_id AS owner_id, q.title, u.email AS owner_email
+      `SELECT a.id, a.question_id, a.author_id AS owner_id, q.title, u.email AS owner_email, u.preferred_locale AS owner_locale
        FROM answers a
        JOIN questions q ON q.id = a.question_id
        JOIN users u ON u.id = a.author_id
@@ -113,21 +115,22 @@ router.post(
     );
     const owner = targetRows[0];
     if (owner.owner_id !== req.user.userId) {
+      const ownerLocale = owner.owner_locale || "zh-CN";
       await createNotification(pool, {
         userId: owner.owner_id,
         actorId: req.user.userId,
         type: notificationTypes.newComment,
         targetType: "comment",
         targetId: result.insertId,
-        title: "你的回答收到了新评论",
+        title: tSystem(ownerLocale, "notifications", "answerCommentTitle"),
         body: owner.title,
         link: `/question/${owner.question_id}`,
       });
       if (await shouldSendEmailForType(pool, owner.owner_id, notificationTypes.newComment)) {
         await sendTemplatedEmail({
           to: owner.owner_email,
-          subject: "问答社区：你的回答收到了新评论",
-          text: `你在《${owner.title}》下的回答收到了新评论，访问 /question/${owner.question_id} 查看。`,
+          subject: tSystem(ownerLocale, "emails", "answerCommentSubject"),
+          text: tSystem(ownerLocale, "emails", "answerCommentText", { title: owner.title, link: `/question/${owner.question_id}` }),
         });
       }
     }

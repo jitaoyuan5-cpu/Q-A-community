@@ -1,9 +1,12 @@
+export type LocaleCode = "zh-CN" | "en-US";
+
 export interface User {
   id: string;
   name: string;
   avatar: string;
   reputation: number;
   role?: "user" | "admin";
+  preferredLocale?: LocaleCode;
   bio?: string;
   location?: string;
   website?: string;
@@ -81,7 +84,7 @@ export interface FollowRecord {
 
 export interface FavoriteRecord {
   id: string;
-  targetType: "question" | "article";
+  targetType: "question" | "article" | "tutorial";
   targetId: string;
   title: string;
   createdAt: string;
@@ -123,13 +126,116 @@ export interface UploadAsset {
 
 export interface ReportRecord {
   id: string;
-  targetType: "question" | "answer" | "article" | "comment";
+  targetType: "question" | "answer" | "article" | "comment" | "chat_message";
   targetId: string;
   reason: string;
   detail?: string;
   status: "pending" | "reviewed" | "rejected";
   actionTaken?: "ignore" | "hide" | "delete" | null;
   reviewNote?: string;
+  createdAt: string;
+}
+
+export interface AssistantCitation {
+  targetType: "question" | "article" | "answer";
+  targetId: number;
+  title: string;
+  excerpt: string;
+  link: string;
+}
+
+export interface AssistantReplyMeta {
+  provider: "local" | "openai";
+  degraded: boolean;
+  reason?: string | null;
+}
+
+export interface AssistantMessage {
+  id: number;
+  role: "system" | "user" | "assistant";
+  content: string;
+  createdAt?: string;
+  citations?: AssistantCitation[];
+  meta?: AssistantReplyMeta;
+}
+
+export interface AssistantThread {
+  id: number;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  lastMessage?: string;
+  messages?: AssistantMessage[];
+}
+
+export interface QuestionChatMessage {
+  id: number;
+  questionId: number;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  author: {
+    id: number;
+    name: string;
+    avatar: string;
+  };
+}
+
+export interface TutorialLesson {
+  id: number;
+  title: string;
+  description: string;
+  sortOrder: number;
+  videoProvider: "youtube" | "bilibili" | "vimeo";
+  videoUrl: string;
+  embedUrl: string;
+  durationSeconds: number;
+  starterTemplate?: "html" | "typescript" | "react" | null;
+  starterFiles?: Record<string, string> | null;
+}
+
+export interface Tutorial {
+  id: number;
+  title: string;
+  summary: string;
+  description: string;
+  cover: string;
+  difficulty: "beginner" | "intermediate" | "advanced";
+  tags: string[];
+  lessonCount?: number;
+  isFavorited?: boolean;
+  progressPercent?: number;
+  lastLessonId?: number | null;
+  createdAt: string;
+  updatedAt: string;
+  author: {
+    id: number;
+    name: string;
+    avatar: string;
+  };
+  lessons?: TutorialLesson[];
+}
+
+export interface PlaygroundTemplate {
+  key: "html" | "typescript" | "react";
+  label: string;
+  files: Record<string, string>;
+}
+
+export interface PlaygroundShare {
+  id: number;
+  title: string;
+  templateKey: PlaygroundTemplate["key"];
+  files: Record<string, string>;
+  createdAt: string;
+}
+
+export interface DeveloperApiKey {
+  id: number;
+  name: string;
+  keyPrefix: string;
+  lastUsedAt?: string | null;
+  revokedAt?: string | null;
   createdAt: string;
 }
 

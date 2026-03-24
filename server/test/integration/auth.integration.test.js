@@ -31,12 +31,14 @@ describe("auth integration", () => {
       email: "new@example.com",
       password: "123456",
       name: "新人",
+      preferredLocale: "en-US",
     });
 
     expect(res.status).toBe(201);
     expect(res.body.accessToken).toBeTruthy();
     expect(res.body.refreshToken).toBeTruthy();
     expect(res.body.user.id).toBe(9);
+    expect(res.body.user.preferredLocale).toBe("en-US");
   });
 
   it("logs in and refreshes token", async () => {
@@ -66,5 +68,15 @@ describe("auth integration", () => {
     const res = await request(app).post("/api/auth/login").send({ email: "missing@example.com", password: "123456" });
     expect(res.status).toBe(401);
     expect(res.body.message).toBe("Invalid credentials");
+  });
+
+  it("allows loopback dev origins for cors preflight", async () => {
+    const res = await request(app)
+      .options("/api/auth/login")
+      .set("Origin", "http://127.0.0.1:5173")
+      .set("Access-Control-Request-Method", "POST");
+
+    expect(res.status).toBe(204);
+    expect(res.headers["access-control-allow-origin"]).toBe("http://127.0.0.1:5173");
   });
 });

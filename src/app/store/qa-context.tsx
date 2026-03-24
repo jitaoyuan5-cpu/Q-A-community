@@ -22,7 +22,7 @@ type QAActions = {
   voteAnswer: (answerId: string, delta: 1 | -1) => Promise<void>;
   acceptAnswer: (answerId: string) => Promise<void>;
   toggleFollowQuestion: (questionId: string) => Promise<void>;
-  toggleFavorite: (targetType: "question" | "article", targetId: string) => Promise<void>;
+  toggleFavorite: (targetType: "question" | "article" | "tutorial", targetId: string) => Promise<void>;
   markQuestionViewed: (questionId: string) => Promise<void>;
   markFollowSeen: (questionId: string) => Promise<void>;
   refreshAll: () => Promise<void>;
@@ -215,6 +215,7 @@ function ApiQAProvider({ children }: { children: React.ReactNode }) {
                   avatar: user.avatar || "",
                   reputation: user.reputation || 0,
                   role: user.role,
+                  preferredLocale: user.preferredLocale,
                   bio: user.bio,
                   location: user.location,
                   website: user.website,

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { asyncHandler } from "../utils/http.js";
 import { authOptional } from "../middleware/auth.js";
+import { parseJsonField } from "../utils/json.js";
 
 const router = Router();
 
@@ -19,7 +20,7 @@ router.get(
     const [rows] = await pool.query(
       "SELECT id, title, company, location, region, salary_min, salary_max, type, skills, posted_at FROM remote_jobs ORDER BY posted_at DESC",
     );
-    res.json(rows.map((row) => ({ ...row, skills: JSON.parse(row.skills) })));
+    res.json(rows.map((row) => ({ ...row, skills: parseJsonField(row.skills, []) })));
   }),
 );
 

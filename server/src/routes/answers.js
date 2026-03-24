@@ -4,6 +4,7 @@ import { asyncHandler } from "../utils/http.js";
 import { requireAuth } from "../middleware/auth.js";
 import { createNotification, notificationTypes, shouldSendEmailForType } from "../utils/notifications.js";
 import { sendTemplatedEmail } from "../utils/mailer.js";
+import { tSystem } from "../utils/locale.js";
 
 const router = Router();
 
@@ -16,7 +17,7 @@ router.post(
     if (!questionId || !content) return res.status(400).json({ message: "Invalid payload" });
 
     const [questionRows] = await pool.query(
-      `SELECT q.id, q.title, q.author_id, u.email AS author_email, u.name AS author_name
+      `SELECT q.id, q.title, q.author_id, u.email AS author_email, u.name AS author_name, u.preferred_locale AS author_locale
        FROM questions q
        JOIN users u ON u.id = q.author_id
        WHERE q.id = ? AND q.is_hidden = 0
@@ -31,48 +32,51 @@ router.post(
     await pool.query("UPDATE follows SET has_new_answers = 1 WHERE question_id = ? AND user_id <> ?", [questionId, req.user.userId]);
 
     if (question.author_id !== req.user.userId) {
+      const authorLocale = question.author_locale || "zh-CN";
       await createNotification(pool, {
         userId: question.author_id,
         actorId: req.user.userId,
         type: notificationTypes.newAnswer,
         targetType: "question",
         targetId: questionId,
-        title: "你的问题收到了新回答",
+        title: tSystem(authorLocale, "notifications", "questionAnsweredTitle"),
         body: question.title,
         link: `/question/${questionId}`,
       });
       if (await shouldSendEmailForType(pool, question.author_id, notificationTypes.newAnswer)) {
         await sendTemplatedEmail({
           to: question.author_email,
-          subject: "问答社区：你的问题收到了新回答",
-          text: `问题《${question.title}》有新的回答，访问 /question/${questionId} 查看。`,
+          subject: tSystem(authorLocale, "emails", "questionAnsweredSubject"),
+          text: tSystem(authorLocale, "emails", "questionAnsweredText", { title: question.title, link: `/question/${questionId}` }),
         });
       }
     }
 
     const [followers] = await pool.query(
       `SELECT f.user_id, u.email
+              ,u.preferred_locale
        FROM follows f
        JOIN users u ON u.id = f.user_id
        WHERE f.question_id = ? AND f.user_id <> ? AND f.user_id <> ?`,
       [questionId, req.user.userId, question.author_id],
     );
     for (const follower of followers) {
+      const followerLocale = follower.preferred_locale || "zh-CN";
       await createNotification(pool, {
         userId: follower.user_id,
         actorId: req.user.userId,
         type: notificationTypes.followUpdate,
         targetType: "question",
         targetId: questionId,
-        title: "你关注的问题有新动态",
+        title: tSystem(followerLocale, "notifications", "followedQuestionUpdatedTitle"),
         body: question.title,
         link: `/question/${questionId}`,
       });
       if (await shouldSendEmailForType(pool, follower.user_id, notificationTypes.followUpdate)) {
         await sendTemplatedEmail({
           to: follower.email,
-          subject: "问答社区：关注的问题有新动态",
-          text: `你关注的问题《${question.title}》有新的回答，访问 /question/${questionId} 查看。`,
+          subject: tSystem(followerLocale, "emails", "followedQuestionUpdatedSubject"),
+          text: tSystem(followerLocale, "emails", "followedQuestionUpdatedText", { title: question.title, link: `/question/${questionId}` }),
         });
       }
     }
@@ -126,7 +130,8 @@ router.post(
     await withTx(async (conn) => {
       const [rows] = await conn.query(
         `SELECT a.id, a.question_id, a.author_id AS answer_author_id, q.author_id, q.title,
-                author.email AS answer_author_email
+                author.email AS answer_author_email,
+                author.preferred_locale AS answer_author_locale
          FROM answers a
          JOIN questions q ON q.id = a.question_id
          JOIN users author ON author.id = a.author_id
@@ -140,13 +145,14 @@ router.post(
       await conn.query("UPDATE answers SET is_accepted = 0 WHERE question_id = ?", [rows[0].question_id]);
       await conn.query("UPDATE answers SET is_accepted = 1 WHERE id = ?", [answerId]);
       if (rows[0].answer_author_id !== req.user.userId) {
+        const locale = rows[0].answer_author_locale || "zh-CN";
         await createNotification(conn, {
           userId: rows[0].answer_author_id,
           actorId: req.user.userId,
           type: notificationTypes.answerAccepted,
           targetType: "answer",
           targetId: answerId,
-          title: "你的回答被采纳了",
+          title: tSystem(locale, "notifications", "answerAcceptedTitle"),
           body: rows[0].title,
           link: `/question/${rows[0].question_id}`,
         });
@@ -154,7 +160,7 @@ router.post(
     });
 
     const [emailRows] = await pool.query(
-      `SELECT a.author_id, u.email, q.title, a.question_id
+      `SELECT a.author_id, u.email, u.preferred_locale, q.title, a.question_id
        FROM answers a
        JOIN users u ON u.id = a.author_id
        JOIN questions q ON q.id = a.question_id
@@ -162,10 +168,11 @@ router.post(
       [answerId],
     );
     if (emailRows.length && emailRows[0].author_id !== req.user.userId && (await shouldSendEmailForType(pool, emailRows[0].author_id, notificationTypes.answerAccepted))) {
+      const locale = emailRows[0].preferred_locale || "zh-CN";
       await sendTemplatedEmail({
         to: emailRows[0].email,
-        subject: "问答社区：你的回答被采纳了",
-        text: `你在《${emailRows[0].title}》下的回答已被采纳，访问 /question/${emailRows[0].question_id} 查看。`,
+        subject: tSystem(locale, "emails", "answerAcceptedSubject"),
+        text: tSystem(locale, "emails", "answerAcceptedText", { title: emailRows[0].title, link: `/question/${emailRows[0].question_id}` }),
       });
     }
 

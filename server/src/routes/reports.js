@@ -7,7 +7,7 @@ import { asyncHandler } from "../utils/http.js";
 const router = Router();
 
 const createSchema = z.object({
-  targetType: z.enum(["question", "answer", "article", "comment"]),
+  targetType: z.enum(["question", "answer", "article", "comment", "chat_message"]),
   targetId: z.number().int().positive(),
   reason: z.enum(["垃圾内容", "广告营销", "攻击辱骂", "色情低俗", "侵权抄袭", "其他"]),
   detail: z.string().max(1000).optional().default(""),
@@ -18,6 +18,7 @@ const tableByType = {
   answer: "answers",
   article: "articles",
   comment: "comments",
+  chat_message: "question_chat_messages",
 };
 
 router.post(

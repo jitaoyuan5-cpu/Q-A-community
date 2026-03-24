@@ -7,7 +7,7 @@ import { asyncHandler } from "../utils/http.js";
 const router = Router();
 
 const toggleSchema = z.object({
-  targetType: z.enum(["question", "article"]),
+  targetType: z.enum(["question", "article", "tutorial"]),
   targetId: z.number().int().positive(),
 });
 
@@ -18,14 +18,17 @@ router.get(
     const [rows] = await pool.query(
       `SELECT f.id, f.target_type, f.target_id, f.created_at,
               q.title AS question_title,
-              a.title AS article_title
+              a.title AS article_title,
+              t.title AS tutorial_title
        FROM favorites f
        LEFT JOIN questions q ON f.target_type = 'question' AND q.id = f.target_id AND q.is_hidden = 0
        LEFT JOIN articles a ON f.target_type = 'article' AND a.id = f.target_id AND a.is_hidden = 0
+       LEFT JOIN tutorials t ON f.target_type = 'tutorial' AND t.id = f.target_id AND t.is_hidden = 0
        WHERE f.user_id = ?
          AND (
            (f.target_type = 'question' AND q.id IS NOT NULL)
            OR (f.target_type = 'article' AND a.id IS NOT NULL)
+           OR (f.target_type = 'tutorial' AND t.id IS NOT NULL)
          )
        ORDER BY f.created_at DESC`,
       [req.user.userId],
@@ -36,7 +39,7 @@ router.get(
         id: row.id,
         targetType: row.target_type,
         targetId: row.target_id,
-        title: row.question_title || row.article_title || "",
+        title: row.question_title || row.article_title || row.tutorial_title || "",
         createdAt: row.created_at,
       })),
     );
@@ -48,7 +51,7 @@ router.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     const payload = toggleSchema.parse(req.body);
-    const table = payload.targetType === "question" ? "questions" : "articles";
+    const table = payload.targetType === "question" ? "questions" : payload.targetType === "article" ? "articles" : "tutorials";
     const [targetRows] = await pool.query(`SELECT id FROM ${table} WHERE id = ? AND is_hidden = 0 LIMIT 1`, [payload.targetId]);
     if (!targetRows.length) return res.status(404).json({ message: "Target not found" });
 

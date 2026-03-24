@@ -12,17 +12,22 @@ router.get(
   asyncHandler(async (req, res) => {
     const id = Number(req.params.id);
     const [users] = await pool.query(
-      "SELECT id, name, avatar, reputation, bio, location, website, role, created_at FROM users WHERE id = ? LIMIT 1",
+      "SELECT id, name, avatar, reputation, bio, location, website, role, preferred_locale, created_at FROM users WHERE id = ? LIMIT 1",
       [id],
     );
     if (!users.length) return res.status(404).json({ message: "User not found" });
 
     const [questions] = await pool.query(
-      "SELECT id, title, views, votes, answers_count, created_at FROM questions WHERE author_id = ? ORDER BY created_at DESC LIMIT 20",
+      "SELECT id, title, views, votes, answers_count, created_at FROM questions WHERE author_id = ? AND is_hidden = 0 ORDER BY created_at DESC LIMIT 20",
       [id],
     );
     const [answers] = await pool.query(
-      "SELECT id, question_id, content, votes, is_accepted, created_at FROM answers WHERE author_id = ? ORDER BY created_at DESC LIMIT 20",
+      `SELECT a.id, a.question_id, a.content, a.votes, a.is_accepted, a.created_at
+       FROM answers a
+       JOIN questions q ON q.id = a.question_id
+       WHERE a.author_id = ? AND a.is_hidden = 0 AND q.is_hidden = 0
+       ORDER BY a.created_at DESC
+       LIMIT 20`,
       [id],
     );
 
@@ -36,6 +41,7 @@ const updateSchema = z.object({
   bio: z.string().max(1000).optional(),
   location: z.string().max(191).optional(),
   website: z.string().url().optional().or(z.literal("")),
+  preferredLocale: z.enum(["zh-CN", "en-US"]).optional(),
 });
 
 const preferenceSchema = z.object({
@@ -53,9 +59,17 @@ router.patch(
     const payload = updateSchema.parse(req.body);
     const fields = [];
     const values = [];
-    for (const key of ["name", "avatar", "bio", "location", "website"]) {
+    const columnByKey = {
+      name: "name",
+      avatar: "avatar",
+      bio: "bio",
+      location: "location",
+      website: "website",
+      preferredLocale: "preferred_locale",
+    };
+    for (const key of Object.keys(columnByKey)) {
       if (Object.hasOwn(payload, key)) {
-        fields.push(`${key} = ?`);
+        fields.push(`${columnByKey[key]} = ?`);
         values.push(payload[key]);
       }
     }

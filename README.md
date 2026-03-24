@@ -1,4 +1,4 @@
-# 问答社区（P2）
+# 问答社区（P3）
 
 前端：React 18 + React Router 7 + Vite + Tailwind 4  
 后端：Node.js + Express + MySQL
@@ -18,6 +18,22 @@
 - 启动：`npm run server:dev`
 - 说明：`npm run server:dev` 现在会先检查 `4000` 端口；如果已有旧的 `node` 进程占用，会直接失败并提示你先停止旧实例，避免继续测到过期后端的 `404`
 - 说明：后端启动时会自动补跑未执行的数据库迁移，避免因为 schema 落后导致登录或资料接口报列不存在
+- 说明：开发环境默认同时接受 `http://localhost:5173` 和 `http://127.0.0.1:5173`，避免 Vite 切到 `127.0.0.1` 后登录请求被 CORS 拦截
+- 可选 AI 配置：
+  - `AI_PROVIDER=local|openai|openrouter|deepseek|moonshot|siliconflow|compatible`
+  - `AI_API_KEY=...`
+  - `AI_BASE_URL=...`：仅在你想覆盖预设地址，或使用 `compatible` 时必填
+  - `AI_MODEL=...`：可覆盖默认模型
+  - `AI_TIMEOUT_MS=12000`
+  - 常见示例：
+    - OpenAI：`AI_PROVIDER=openai`
+    - OpenRouter：`AI_PROVIDER=openrouter`
+    - DeepSeek：`AI_PROVIDER=deepseek`
+    - Moonshot：`AI_PROVIDER=moonshot`
+    - SiliconFlow：`AI_PROVIDER=siliconflow`
+    - 自定义兼容网关：`AI_PROVIDER=compatible` 且填写 `AI_BASE_URL`
+- 可选开放平台限流配置：
+  - `PUBLIC_API_RATE_LIMIT=120`
 
 ### 3) 前端环境变量
 - 复制 `.env.example` 为 `.env`
@@ -48,6 +64,28 @@
 - 问题/文章分享
 - 问题/文章收藏
 - 举报与管理员审核台
+
+## P3 已落地能力
+- AI 问答助手：`/assistant`
+- 问题页即时讨论：问题详情页内聊天区 + WebSocket 广播
+- 视频教程：`/tutorials`、`/tutorials/:id`
+- 在线编程环境：`/playground`
+- 多语言：`zh-CN / en-US`
+- PWA：manifest、service worker、安装提示、离线壳
+- 开放平台：开发者入口、API Key、自助吊销、只读公共 API
+- 教程后台：`/admin/tutorials`
+
+## P3 关键入口
+- AI 助手：`/assistant`
+- 教程列表：`/tutorials`
+- Playground：`/playground`
+- 开发者平台：`/developers`
+- API Keys：`/developers/keys`
+- OpenAPI 文档页：`/developers/docs`
+- 只读公共 API：`/api/public/v1/*`
+
+## PWA 说明
+- PWA 当前只缓存应用壳和静态资源，不缓存 `/api/*` 响应，避免把用户态接口结果离线回放给其他登录会话
 
 ## 关键目录
 - `src/` 前端

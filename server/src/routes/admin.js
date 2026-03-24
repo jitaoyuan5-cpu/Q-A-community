@@ -16,6 +16,7 @@ const tableByType = {
   answer: "answers",
   article: "articles",
   comment: "comments",
+  chat_message: "question_chat_messages",
 };
 
 router.get(

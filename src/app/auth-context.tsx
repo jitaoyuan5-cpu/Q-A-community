@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { apiRequest, tokenStore } from "./api/client";
+import type { LocaleCode } from "./types";
 
 type AuthUser = {
   id: number;
@@ -11,15 +12,17 @@ type AuthUser = {
   bio?: string;
   location?: string;
   website?: string;
+  preferredLocale?: LocaleCode;
 };
 
 type AuthContextType = {
   user: AuthUser | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string, preferredLocale?: LocaleCode) => Promise<void>;
   logout: () => Promise<void>;
   refreshMe: () => Promise<void>;
+  updateUser: (patch: Partial<AuthUser>) => void;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -87,10 +90,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         tokenStore.set(data.accessToken, data.refreshToken);
         setUser(data.user);
       },
-      register: async (name, email, password) => {
+      register: async (name, email, password, preferredLocale) => {
         const data = await apiRequest<AuthResponse>("/auth/register", {
           method: "POST",
-          body: JSON.stringify({ name, email, password }),
+          body: JSON.stringify({ name, email, password, preferredLocale }),
         });
         tokenStore.set(data.accessToken, data.refreshToken);
         setUser(data.user);
@@ -107,6 +110,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(null);
       },
       refreshMe,
+      updateUser: (patch) => {
+        setUser((current) => (current ? { ...current, ...patch } : current));
+      },
     }),
     [loading, user],
   );

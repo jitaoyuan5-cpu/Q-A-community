@@ -10,7 +10,7 @@ export function FavoriteButton({
   active,
   className = "",
 }: {
-  targetType: "question" | "article";
+  targetType: "question" | "article" | "tutorial";
   targetId: string;
   active: boolean;
   className?: string;
@@ -23,7 +23,7 @@ export function FavoriteButton({
 
   useEffect(() => {
     if (error) setError("");
-  }, [active]);
+  }, [active, error]);
 
   return (
     <div className="inline-flex flex-col items-start gap-1">
@@ -45,7 +45,11 @@ export function FavoriteButton({
             setPending(false);
           }
         }}
-        className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs ${active ? "border-rose-200 bg-rose-50 text-rose-600" : "border-slate-200 bg-white text-slate-600"} ${pending ? "cursor-not-allowed opacity-70" : ""} ${className}`.trim()}
+        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-medium transition ${
+          active
+            ? "border-[rgba(186,107,45,0.22)] bg-[rgba(186,107,45,0.1)] text-[var(--accent)]"
+            : "border-slate-200 bg-white/80 text-slate-600"
+        } ${pending ? "cursor-not-allowed opacity-70" : "hover:-translate-y-0.5"} ${className}`.trim()}
       >
         <Heart className={`h-4 w-4 ${active ? "fill-current" : ""}`} />
         {pending ? "处理中..." : active ? "已收藏" : "收藏"}
