@@ -14,6 +14,7 @@ const broadcastMock = vi.fn();
 const getOnlineCountMock = vi.fn();
 const searchSourcesMock = vi.fn();
 const generateReplyMock = vi.fn();
+const streamReplyMock = vi.fn();
 
 vi.mock("../../src/db/pool.js", () => ({
   pool: { query: queryMock },
@@ -29,6 +30,7 @@ vi.mock("../../src/realtime/question-chat.js", () => ({
 vi.mock("../../src/utils/assistant.js", () => ({
   searchAssistantSources: (...args) => searchSourcesMock(...args),
   generateAssistantReply: (...args) => generateReplyMock(...args),
+  streamAssistantReply: (...args) => streamReplyMock(...args),
 }));
 
 vi.mock("../../src/utils/api-keys.js", () => ({
@@ -54,6 +56,7 @@ describe("p3 features integration", () => {
     getOnlineCountMock.mockReset();
     searchSourcesMock.mockReset();
     generateReplyMock.mockReset();
+    streamReplyMock.mockReset();
     getOnlineCountMock.mockReturnValue(0);
   });
 
@@ -102,6 +105,146 @@ describe("p3 features integration", () => {
         query: "什么时候应该用 useReducer",
       }),
     );
+  });
+
+  it("merges explicit assistant context refs into the generated citations", async () => {
+    searchSourcesMock.mockResolvedValueOnce([]);
+    generateReplyMock.mockResolvedValueOnce({
+      content: "我会优先引用你指定的问题。",
+      provider: "compatible",
+      degraded: false,
+      reason: null,
+    });
+    queryMock
+      .mockResolvedValueOnce([[{ preferred_locale: "zh-CN" }]])
+      .mockResolvedValueOnce([{ insertId: 15 }])
+      .mockResolvedValueOnce([{ insertId: 16 }])
+      .mockResolvedValueOnce([[{ role: "user", content: "帮我引用这条内容" }]])
+      .mockResolvedValueOnce([[{ id: 21, title: "React Hooks 深入训练营", excerpt: "用 6 节课系统掌握 Hooks 组合与性能优化。" }]])
+      .mockResolvedValueOnce([{ insertId: 17 }])
+      .mockResolvedValueOnce([{}]);
+
+    const res = await request(app)
+      .post("/api/assistant/query")
+      .set("Authorization", bearer())
+      .send({
+        query: "帮我引用这条内容",
+        contextRefs: [{ targetType: "question", targetId: 21 }],
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.message.citations).toEqual([
+      {
+        targetType: "question",
+        targetId: 21,
+        title: "React Hooks 深入训练营",
+        excerpt: "用 6 节课系统掌握 Hooks 组合与性能优化。",
+        link: "/question/21",
+      },
+    ]);
+    expect(generateReplyMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        citations: [
+          {
+            targetType: "question",
+            targetId: 21,
+            title: "React Hooks 深入训练营",
+            excerpt: "用 6 节课系统掌握 Hooks 组合与性能优化。",
+            link: "/question/21",
+          },
+        ],
+      }),
+    );
+  });
+
+  it("streams an assistant reply and flushes the final message payload", async () => {
+    searchSourcesMock.mockResolvedValueOnce([
+      {
+        targetType: "question",
+        targetId: 1,
+        title: "React Hooks 深入训练营",
+        excerpt: "Hooks 组合与性能优化",
+        link: "/tutorials/1",
+      },
+    ]);
+    streamReplyMock.mockImplementationOnce(async ({ onChunk }) => {
+      await onChunk("先看状态边界，");
+      await onChunk("再决定是否拆 reducer。");
+      return {
+        content: "先看状态边界，再决定是否拆 reducer。",
+        provider: "compatible",
+        degraded: false,
+        reason: null,
+      };
+    });
+    queryMock
+      .mockResolvedValueOnce([[{ preferred_locale: "en-US" }]])
+      .mockResolvedValueOnce([{ insertId: 5 }])
+      .mockResolvedValueOnce([{ insertId: 6 }])
+      .mockResolvedValueOnce([[{ role: "user", content: "什么时候应该用 useReducer" }]])
+      .mockResolvedValueOnce([{ insertId: 7 }])
+      .mockResolvedValueOnce([{}]);
+
+    const res = await request(app)
+      .post("/api/assistant/query/stream")
+      .set("Authorization", bearer())
+      .send({ query: "什么时候应该用 useReducer" });
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain("event: thread");
+    expect(res.text).toContain("event: delta");
+    expect(res.text).toContain("event: done");
+    expect(res.text).toContain("先看状态边界，再决定是否拆 reducer。");
+    expect(streamReplyMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        locale: "en-US",
+        query: "什么时候应该用 useReducer",
+      }),
+    );
+  });
+
+  it("returns assistant reference suggestions for questions, articles, answers, and comments", async () => {
+    queryMock
+      .mockResolvedValueOnce([[{ id: 21, title: "React Hooks 深入训练营", excerpt: "问题摘要" }]])
+      .mockResolvedValueOnce([[{ id: 22, title: "React Hooks 文章", excerpt: "文章摘要" }]])
+      .mockResolvedValueOnce([[{ id: 31, question_id: 21, title: "React Hooks 深入训练营", excerpt: "回答摘要" }]])
+      .mockResolvedValueOnce([[{ id: 41, question_id: 21, question_title: "React Hooks 深入训练营", excerpt: "评论摘要" }]]);
+
+    const res = await request(app)
+      .get("/api/assistant/references?q=React")
+      .set("Authorization", bearer());
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([
+      {
+        targetType: "question",
+        targetId: 21,
+        title: "React Hooks 深入训练营",
+        excerpt: "问题摘要",
+        link: "/question/21",
+      },
+      {
+        targetType: "article",
+        targetId: 22,
+        title: "React Hooks 文章",
+        excerpt: "文章摘要",
+        link: "/articles/22",
+      },
+      {
+        targetType: "answer",
+        targetId: 31,
+        title: "回答 · React Hooks 深入训练营",
+        excerpt: "回答摘要",
+        link: "/question/21#answer-31",
+      },
+      {
+        targetType: "comment",
+        targetId: 41,
+        title: "评论 · React Hooks 深入训练营",
+        excerpt: "评论摘要",
+        link: "/question/21#comment-41",
+      },
+    ]);
   });
 
   it("returns assistant thread detail for the current user", async () => {
@@ -262,5 +405,14 @@ describe("p3 features integration", () => {
 
     expect(revokeRes.status).toBe(200);
     expect(revokeRes.body.success).toBe(true);
+  });
+
+  it("returns an expanded openapi document for the public api", async () => {
+    const res = await request(app).get("/api/public/v1/openapi.json");
+
+    expect(res.status).toBe(200);
+    expect(res.body.components.securitySchemes.apiKeyAuth.name).toBe("x-api-key");
+    expect(res.body.paths["/api/public/v1/questions"].get.responses["200"].description).toBeTruthy();
+    expect(res.body.paths["/api/public/v1/questions/{id}"].get.parameters[0].$ref).toBe("#/components/parameters/QuestionId");
   });
 });

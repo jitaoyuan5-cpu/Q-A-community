@@ -1,6 +1,8 @@
 import { Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { apiRequest } from "../api/client";
+import { useI18n } from "../i18n";
+import { getP3Copy } from "../utils/p3-copy";
 
 type AdminTutorialSummary = {
   id: number;
@@ -53,12 +55,26 @@ type TutorialPayload = {
   }>;
 };
 
-function FieldHeader({ title, required, hint, htmlFor }: { title: string; required?: boolean; hint: string; htmlFor?: string }) {
+function FieldHeader({
+  title,
+  required,
+  hint,
+  htmlFor,
+  requiredLabel,
+  optionalLabel,
+}: {
+  title: string;
+  required?: boolean;
+  hint: string;
+  htmlFor?: string;
+  requiredLabel: string;
+  optionalLabel: string;
+}) {
   return (
     <div className="mb-2">
       <div className="flex items-center gap-2">
         <label htmlFor={htmlFor} className="block text-sm font-medium">{title}</label>
-        <span className={`rounded-full px-2 py-0.5 text-[11px] ${required ? "bg-rose-50 text-rose-700" : "bg-slate-100 text-slate-600"}`}>{required ? "必填" : "选填"}</span>
+        <span className={`rounded-full px-2 py-0.5 text-[11px] ${required ? "bg-rose-50 text-rose-700" : "bg-slate-100 text-slate-600"}`}>{required ? requiredLabel : optionalLabel}</span>
       </div>
       <p className="mt-1 text-xs text-slate-500">{hint}</p>
     </div>
@@ -74,25 +90,25 @@ const isValidUrl = (value: string) => {
   }
 };
 
-const toFriendlyTutorialError = (error: unknown) => {
-  const message = (error as Error)?.message || "教程保存失败";
-  if (message === "Failed to fetch") return "提交失败，请确认后端服务已启动并可访问";
+const toFriendlyTutorialError = (error: unknown, copy: ReturnType<typeof getP3Copy>["adminTutorials"]) => {
+  const message = (error as Error)?.message || copy.saveFailed;
+  if (message === "Failed to fetch") return copy.submitFailed;
   return message;
 };
 
-const buildTutorialPayload = (draft: TutorialDraft): TutorialPayload => {
+const buildTutorialPayload = (draft: TutorialDraft, copy: ReturnType<typeof getP3Copy>["adminTutorials"]): TutorialPayload => {
   const title = draft.title.trim();
   const summary = draft.summary.trim();
   const description = draft.description.trim();
   const cover = draft.cover.trim();
   const tags = draft.tagsText.split(",").map((item) => item.trim()).filter(Boolean);
 
-  if (title.length < 2) throw new Error("请填写教程标题，至少 2 个字");
-  if (summary.length < 10) throw new Error("请填写教程摘要，至少 10 个字");
-  if (description.length < 10) throw new Error("请填写课程介绍，至少 10 个字");
-  if (cover && !isValidUrl(cover)) throw new Error("封面地址必须是合法 URL，或留空");
-  if (tags.length > 6) throw new Error("课程标签最多填写 6 个");
-  if (!draft.lessons.length) throw new Error("至少添加 1 个课时");
+  if (title.length < 2) throw new Error(copy.titleMin);
+  if (summary.length < 10) throw new Error(copy.summaryMin);
+  if (description.length < 10) throw new Error(copy.descriptionMin);
+  if (cover && !isValidUrl(cover)) throw new Error(copy.coverUrlInvalid);
+  if (tags.length > 6) throw new Error(copy.tagsMax);
+  if (!draft.lessons.length) throw new Error(copy.lessonsMin);
 
   return {
     title,
@@ -108,10 +124,10 @@ const buildTutorialPayload = (draft: TutorialDraft): TutorialPayload => {
       const lessonVideoUrl = lesson.videoUrl.trim();
       const durationSeconds = Number(lesson.durationSeconds);
 
-      if (lessonTitle.length < 2) throw new Error(`请填写第 ${index + 1} 个课时的标题，至少 2 个字`);
-      if (lessonDescription.length < 2) throw new Error(`请填写第 ${index + 1} 个课时的说明，至少 2 个字`);
-      if (!isValidUrl(lessonVideoUrl)) throw new Error(`第 ${index + 1} 个课时的视频地址必须是合法 URL`);
-      if (!Number.isFinite(durationSeconds) || durationSeconds < 0) throw new Error(`第 ${index + 1} 个课时的时长不能小于 0`);
+      if (lessonTitle.length < 2) throw new Error(copy.lessonTitleMin(index + 1));
+      if (lessonDescription.length < 2) throw new Error(copy.lessonDescriptionMin(index + 1));
+      if (!isValidUrl(lessonVideoUrl)) throw new Error(copy.lessonVideoUrlInvalid(index + 1));
+      if (!Number.isFinite(durationSeconds) || durationSeconds < 0) throw new Error(copy.lessonDurationInvalid(index + 1));
 
       let starterFiles: Record<string, string> | null = null;
       if (lesson.starterFilesText.trim()) {
@@ -122,7 +138,7 @@ const buildTutorialPayload = (draft: TutorialDraft): TutorialPayload => {
           }
           starterFiles = parsed;
         } catch {
-          throw new Error(`第 ${index + 1} 个课时的 Starter files 必须是合法 JSON 对象`);
+          throw new Error(copy.starterFilesInvalid(index + 1));
         }
       }
 
@@ -139,9 +155,9 @@ const buildTutorialPayload = (draft: TutorialDraft): TutorialPayload => {
   };
 };
 
-const emptyLesson = (): LessonDraft => ({
-  title: "新课时",
-  description: "补充本节课的学习重点。",
+const emptyLesson = (copy: ReturnType<typeof getP3Copy>["adminTutorials"]): LessonDraft => ({
+  title: copy.newLessonTitle,
+  description: copy.newLessonDescription,
   sortOrder: 0,
   videoUrl: "https://www.youtube.com/watch?v=O6P86uwfdR0",
   durationSeconds: 600,
@@ -149,7 +165,7 @@ const emptyLesson = (): LessonDraft => ({
   starterFilesText: "",
 });
 
-const emptyDraft = (): TutorialDraft => ({
+const emptyDraft = (copy: ReturnType<typeof getP3Copy>["adminTutorials"]): TutorialDraft => ({
   title: "",
   summary: "",
   description: "",
@@ -157,14 +173,18 @@ const emptyDraft = (): TutorialDraft => ({
   difficulty: "beginner",
   isPublished: true,
   tagsText: "",
-  lessons: [emptyLesson()],
+  lessons: [emptyLesson(copy)],
 });
 
 export function AdminTutorialsPage() {
+  const { locale } = useI18n();
+  const copy = getP3Copy(locale).adminTutorials;
   const [items, setItems] = useState<AdminTutorialSummary[]>([]);
-  const [draft, setDraft] = useState<TutorialDraft>(emptyDraft());
+  const [draft, setDraft] = useState<TutorialDraft>(emptyDraft(copy));
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const difficultyLabel = (value: TutorialDraft["difficulty"]) =>
+    value === "advanced" ? copy.difficultyAdvanced : value === "intermediate" ? copy.difficultyIntermediate : copy.difficultyBeginner;
 
   const refresh = async () => {
     const rows = await apiRequest<AdminTutorialSummary[]>("/admin/tutorials");
@@ -174,6 +194,13 @@ export function AdminTutorialsPage() {
   useEffect(() => {
     refresh().catch((err) => setError((err as Error).message));
   }, []);
+
+  useEffect(() => {
+    setDraft((prev) => {
+      if (prev.id || prev.title || prev.summary || prev.description || prev.cover || prev.tagsText) return prev;
+      return emptyDraft(copy);
+    });
+  }, [copy]);
 
   const loadTutorial = async (id: number) => {
     const detail = await apiRequest<any>(`/admin/tutorials/${id}`);
@@ -203,18 +230,18 @@ export function AdminTutorialsPage() {
       <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-semibold">教程管理</h1>
-            <p className="text-sm text-slate-500">课程 CRUD 与章节配置</p>
+            <h1 className="text-xl font-semibold">{copy.pageTitle}</h1>
+            <p className="text-sm text-slate-500">{copy.pageSubtitle}</p>
           </div>
-          <button type="button" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs" onClick={() => setDraft(emptyDraft())}>
-            新建
+          <button type="button" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs" onClick={() => setDraft(emptyDraft(copy))}>
+            {copy.new}
           </button>
         </div>
         <div className="space-y-2">
           {items.map((item) => (
             <button key={item.id} type="button" className="block w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-left" onClick={() => loadTutorial(item.id).catch((err) => setError((err as Error).message))}>
               <p className="font-medium text-slate-900">{item.title}</p>
-              <p className="mt-1 text-xs text-slate-500">{item.lessonCount} 节 · {item.difficulty}</p>
+              <p className="mt-1 text-xs text-slate-500">{copy.lessonsSummary(item.lessonCount, difficultyLabel(item.difficulty))}</p>
             </button>
           ))}
         </div>
@@ -227,114 +254,114 @@ export function AdminTutorialsPage() {
           setError("");
           setSuccess("");
           try {
-            const body = buildTutorialPayload(draft);
+            const body = buildTutorialPayload(draft, copy);
             if (draft.id) {
               await apiRequest(`/admin/tutorials/${draft.id}`, { method: "PUT", body: JSON.stringify(body) });
             } else {
               await apiRequest("/admin/tutorials", { method: "POST", body: JSON.stringify(body) });
             }
-            setSuccess("教程已保存");
+            setSuccess(copy.saved);
             await refresh();
           } catch (err) {
-            setError(toFriendlyTutorialError(err));
+            setError(toFriendlyTutorialError(err, copy));
           }
         }}
       >
         <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <FieldHeader title="标题" required hint="课程在前台列表和详情页显示的主标题。" htmlFor="tutorial-title" />
+            <FieldHeader title={copy.fieldTitle} required hint={copy.fieldTitleHint} htmlFor="tutorial-title" requiredLabel={copy.required} optionalLabel={copy.optional} />
             <input id="tutorial-title" value={draft.title} onChange={(event) => setDraft((prev) => ({ ...prev, title: event.target.value }))} className="h-10 w-full rounded-lg border border-slate-200 px-3" />
           </div>
           <div>
-            <FieldHeader title="封面" hint="课程封面图片 URL。可以留空，留空时前台使用默认占位样式。" htmlFor="tutorial-cover" />
+            <FieldHeader title={copy.fieldCover} hint={copy.fieldCoverHint} htmlFor="tutorial-cover" requiredLabel={copy.required} optionalLabel={copy.optional} />
             <input id="tutorial-cover" value={draft.cover} onChange={(event) => setDraft((prev) => ({ ...prev, cover: event.target.value }))} className="h-10 w-full rounded-lg border border-slate-200 px-3" />
           </div>
         </div>
         <div className="grid gap-4 md:grid-cols-3">
           <div>
-            <FieldHeader title="难度" required hint="用于告诉用户课程适合的学习阶段。" htmlFor="tutorial-difficulty" />
+            <FieldHeader title={copy.fieldDifficulty} required hint={copy.fieldDifficultyHint} htmlFor="tutorial-difficulty" requiredLabel={copy.required} optionalLabel={copy.optional} />
             <select id="tutorial-difficulty" value={draft.difficulty} onChange={(event) => setDraft((prev) => ({ ...prev, difficulty: event.target.value as TutorialDraft["difficulty"] }))} className="h-10 w-full rounded-lg border border-slate-200 px-3">
-              <option value="beginner">beginner</option>
-              <option value="intermediate">intermediate</option>
-              <option value="advanced">advanced</option>
+              <option value="beginner">{copy.difficultyBeginner}</option>
+              <option value="intermediate">{copy.difficultyIntermediate}</option>
+              <option value="advanced">{copy.difficultyAdvanced}</option>
             </select>
           </div>
           <div className="md:col-span-2">
-            <FieldHeader title="标签（逗号分隔）" hint="帮助用户筛选课程。多个标签请用英文逗号分隔，最多 6 个。" htmlFor="tutorial-tags" />
+            <FieldHeader title={copy.fieldTags} hint={copy.fieldTagsHint} htmlFor="tutorial-tags" requiredLabel={copy.required} optionalLabel={copy.optional} />
             <input id="tutorial-tags" value={draft.tagsText} onChange={(event) => setDraft((prev) => ({ ...prev, tagsText: event.target.value }))} className="h-10 w-full rounded-lg border border-slate-200 px-3" />
           </div>
         </div>
         <div>
-          <FieldHeader title="摘要" required hint="课程卡片上的简短介绍，建议写清学习收益和适合对象。" htmlFor="tutorial-summary" />
+          <FieldHeader title={copy.fieldSummary} required hint={copy.fieldSummaryHint} htmlFor="tutorial-summary" requiredLabel={copy.required} optionalLabel={copy.optional} />
           <textarea id="tutorial-summary" value={draft.summary} onChange={(event) => setDraft((prev) => ({ ...prev, summary: event.target.value }))} className="min-h-24 w-full rounded-lg border border-slate-200 p-3" />
         </div>
         <div>
-          <FieldHeader title="课程介绍（Markdown）" required hint="课程详情页的长说明，可以写课程目标、适用人群和章节安排。" htmlFor="tutorial-description" />
+          <FieldHeader title={copy.fieldDescription} required hint={copy.fieldDescriptionHint} htmlFor="tutorial-description" requiredLabel={copy.required} optionalLabel={copy.optional} />
           <textarea id="tutorial-description" value={draft.description} onChange={(event) => setDraft((prev) => ({ ...prev, description: event.target.value }))} className="min-h-32 w-full rounded-lg border border-slate-200 p-3" />
         </div>
         <div>
-          <FieldHeader title="发布状态" hint="勾选后前台用户可看到这门课程；取消勾选时只在后台保留。" />
+          <FieldHeader title={copy.fieldPublished} hint={copy.fieldPublishedHint} requiredLabel={copy.required} optionalLabel={copy.optional} />
           <label className="inline-flex items-center gap-2 text-sm text-slate-700">
             <input type="checkbox" checked={draft.isPublished} onChange={(event) => setDraft((prev) => ({ ...prev, isPublished: event.target.checked }))} />
-            发布课程
+            {copy.publishCourse}
           </label>
         </div>
         <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold">课时</h2>
-              <p className="text-xs text-slate-500">每个课时至少要有标题、说明、视频地址。Starter 模板和 Starter files 仅在需要带入 Playground 时填写。</p>
+              <h2 className="text-lg font-semibold">{copy.lessonsTitle}</h2>
+              <p className="text-xs text-slate-500">{copy.lessonsHint}</p>
             </div>
-            <button type="button" className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs" onClick={() => setDraft((prev) => ({ ...prev, lessons: [...prev.lessons, { ...emptyLesson(), sortOrder: prev.lessons.length + 1 }] }))}>
+            <button type="button" className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs" onClick={() => setDraft((prev) => ({ ...prev, lessons: [...prev.lessons, { ...emptyLesson(copy), sortOrder: prev.lessons.length + 1 }] }))}>
               <Plus className="mr-1 h-3.5 w-3.5" />
-              新增课时
+              {copy.addLesson}
             </button>
           </div>
           {draft.lessons.map((lesson, index) => (
             <div key={`${lesson.title}-${index}`} className="rounded-2xl border border-slate-200 bg-white p-4">
               <div className="mb-3 flex items-center justify-between">
-                <h3 className="font-medium text-slate-900">课时 {index + 1}</h3>
+                <h3 className="font-medium text-slate-900">{copy.lessonCardTitle(index + 1)}</h3>
                 <button type="button" className="inline-flex items-center rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-600" onClick={() => setDraft((prev) => ({ ...prev, lessons: prev.lessons.filter((_, lessonIndex) => lessonIndex !== index) }))}>
                   <Trash2 className="mr-1 h-3.5 w-3.5" />
-                  删除
+                  {copy.deleteLesson}
                 </button>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 <div>
-                  <FieldHeader title="课时标题" required hint="用户在章节列表里看到的标题。" />
-                  <input value={lesson.title} onChange={(event) => setDraft((prev) => ({ ...prev, lessons: prev.lessons.map((item, lessonIndex) => lessonIndex === index ? { ...item, title: event.target.value } : item) }))} className="h-10 w-full rounded-lg border border-slate-200 px-3" placeholder="课时标题" />
+                  <FieldHeader title={copy.lessonTitle} required hint={copy.lessonTitleHint} requiredLabel={copy.required} optionalLabel={copy.optional} />
+                  <input value={lesson.title} onChange={(event) => setDraft((prev) => ({ ...prev, lessons: prev.lessons.map((item, lessonIndex) => lessonIndex === index ? { ...item, title: event.target.value } : item) }))} className="h-10 w-full rounded-lg border border-slate-200 px-3" placeholder={copy.lessonTitlePlaceholder} />
                 </div>
                 <div>
-                  <FieldHeader title="视频地址" required hint="只支持 YouTube、Bilibili、Vimeo 的合法链接。" />
-                  <input value={lesson.videoUrl} onChange={(event) => setDraft((prev) => ({ ...prev, lessons: prev.lessons.map((item, lessonIndex) => lessonIndex === index ? { ...item, videoUrl: event.target.value } : item) }))} className="h-10 w-full rounded-lg border border-slate-200 px-3" placeholder="视频地址" />
+                  <FieldHeader title={copy.lessonVideo} required hint={copy.lessonVideoHint} requiredLabel={copy.required} optionalLabel={copy.optional} />
+                  <input value={lesson.videoUrl} onChange={(event) => setDraft((prev) => ({ ...prev, lessons: prev.lessons.map((item, lessonIndex) => lessonIndex === index ? { ...item, videoUrl: event.target.value } : item) }))} className="h-10 w-full rounded-lg border border-slate-200 px-3" placeholder={copy.lessonVideoPlaceholder} />
                 </div>
               </div>
               <div className="mt-3">
-                <FieldHeader title="课时说明" required hint="描述这一课会讲什么、适合解决什么问题。" />
-                <textarea value={lesson.description} onChange={(event) => setDraft((prev) => ({ ...prev, lessons: prev.lessons.map((item, lessonIndex) => lessonIndex === index ? { ...item, description: event.target.value } : item) }))} className="min-h-20 w-full rounded-lg border border-slate-200 p-3" placeholder="课时说明" />
+                <FieldHeader title={copy.lessonDescription} required hint={copy.lessonDescriptionHint} requiredLabel={copy.required} optionalLabel={copy.optional} />
+                <textarea value={lesson.description} onChange={(event) => setDraft((prev) => ({ ...prev, lessons: prev.lessons.map((item, lessonIndex) => lessonIndex === index ? { ...item, description: event.target.value } : item) }))} className="min-h-20 w-full rounded-lg border border-slate-200 p-3" placeholder={copy.lessonDescriptionPlaceholder} />
               </div>
               <div className="mt-3 grid gap-3 md:grid-cols-3">
                 <div>
-                  <FieldHeader title="排序" hint="数字越小越靠前；留空时默认按当前顺序保存。" />
-                  <input type="number" value={lesson.sortOrder} onChange={(event) => setDraft((prev) => ({ ...prev, lessons: prev.lessons.map((item, lessonIndex) => lessonIndex === index ? { ...item, sortOrder: Number(event.target.value) } : item) }))} className="h-10 w-full rounded-lg border border-slate-200 px-3" placeholder="排序" />
+                  <FieldHeader title={copy.lessonSort} hint={copy.lessonSortHint} requiredLabel={copy.required} optionalLabel={copy.optional} />
+                  <input type="number" value={lesson.sortOrder} onChange={(event) => setDraft((prev) => ({ ...prev, lessons: prev.lessons.map((item, lessonIndex) => lessonIndex === index ? { ...item, sortOrder: Number(event.target.value) } : item) }))} className="h-10 w-full rounded-lg border border-slate-200 px-3" placeholder={copy.lessonSortPlaceholder} />
                 </div>
                 <div>
-                  <FieldHeader title="时长（秒）" hint="用于展示课程时长和进度。" />
-                  <input type="number" value={lesson.durationSeconds} onChange={(event) => setDraft((prev) => ({ ...prev, lessons: prev.lessons.map((item, lessonIndex) => lessonIndex === index ? { ...item, durationSeconds: Number(event.target.value) } : item) }))} className="h-10 w-full rounded-lg border border-slate-200 px-3" placeholder="时长(秒)" />
+                  <FieldHeader title={copy.lessonDuration} hint={copy.lessonDurationHint} requiredLabel={copy.required} optionalLabel={copy.optional} />
+                  <input type="number" value={lesson.durationSeconds} onChange={(event) => setDraft((prev) => ({ ...prev, lessons: prev.lessons.map((item, lessonIndex) => lessonIndex === index ? { ...item, durationSeconds: Number(event.target.value) } : item) }))} className="h-10 w-full rounded-lg border border-slate-200 px-3" placeholder={copy.lessonDurationPlaceholder} />
                 </div>
                 <div>
-                  <FieldHeader title="Starter 模板" hint="如果这节课要一键带到 Playground，选择对应模板；否则留空。" />
+                  <FieldHeader title={copy.starterTemplate} hint={copy.starterTemplateHint} requiredLabel={copy.required} optionalLabel={copy.optional} />
                   <select value={lesson.starterTemplate} onChange={(event) => setDraft((prev) => ({ ...prev, lessons: prev.lessons.map((item, lessonIndex) => lessonIndex === index ? { ...item, starterTemplate: event.target.value as LessonDraft["starterTemplate"] } : item) }))} className="h-10 w-full rounded-lg border border-slate-200 px-3">
-                    <option value="">无 starter</option>
-                    <option value="html">html</option>
-                    <option value="typescript">typescript</option>
-                    <option value="react">react</option>
+                    <option value="">{copy.starterTemplateNone}</option>
+                    <option value="html">{copy.starterTemplateHtml}</option>
+                    <option value="typescript">{copy.starterTemplateTypescript}</option>
+                    <option value="react">{copy.starterTemplateReact}</option>
                   </select>
                 </div>
               </div>
               <div className="mt-3">
-                <FieldHeader title="Starter files JSON" hint='可选。填写后会作为 Playground 初始文件，例如 {"App.tsx":"..."}。必须是 JSON 对象。' />
-                <textarea value={lesson.starterFilesText} onChange={(event) => setDraft((prev) => ({ ...prev, lessons: prev.lessons.map((item, lessonIndex) => lessonIndex === index ? { ...item, starterFilesText: event.target.value } : item) }))} className="min-h-28 w-full rounded-lg border border-slate-200 p-3 font-mono text-xs" placeholder='Starter files JSON，例如 {"App.tsx":"..."}' />
+                <FieldHeader title={copy.starterFiles} hint={copy.starterFilesHint} requiredLabel={copy.required} optionalLabel={copy.optional} />
+                <textarea value={lesson.starterFilesText} onChange={(event) => setDraft((prev) => ({ ...prev, lessons: prev.lessons.map((item, lessonIndex) => lessonIndex === index ? { ...item, starterFilesText: event.target.value } : item) }))} className="min-h-28 w-full rounded-lg border border-slate-200 p-3 font-mono text-xs" placeholder={copy.starterFilesPlaceholder} />
               </div>
             </div>
           ))}
@@ -350,17 +377,17 @@ export function AdminTutorialsPage() {
                 if (!draft.id) return;
                 try {
                   await apiRequest(`/admin/tutorials/${draft.id}`, { method: "DELETE" });
-                  setDraft(emptyDraft());
+                  setDraft(emptyDraft(copy));
                   await refresh();
                 } catch (err) {
-                  setError(toFriendlyTutorialError(err));
+                  setError(toFriendlyTutorialError(err, copy));
                 }
               }}
             >
-              删除教程
+              {copy.deleteTutorial}
             </button>
           ) : null}
-          <button className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white">保存教程</button>
+          <button className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white">{copy.saveTutorial}</button>
         </div>
       </form>
     </section>

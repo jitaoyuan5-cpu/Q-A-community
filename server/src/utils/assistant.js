@@ -4,6 +4,15 @@ import { normalizeLocale } from "./locale.js";
 
 const assistantStopTerms = new Set(["如何", "什么", "为什么", "怎么", "可以", "一下", "一个", "一些", "是否", "以及", "这个", "那个"]);
 
+const clampPromptText = (value, maxLength) => {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength)}…`;
+};
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const toCitation = (row, targetType) => ({
   targetType,
   targetId: row.id,
@@ -126,14 +135,19 @@ const buildLocalCompletion = ({ locale, query, citations }) => {
   return `${lead}\n\n${bullets}${followUp}`;
 };
 
-const buildPrompt = ({ query, citations, history, locale }) => {
+const buildPrompt = ({ query, citations, history, locale, compact = false }) => {
+  const sourceLimit = compact ? 3 : 6;
+  const sourceExcerptLength = compact ? 96 : 180;
+  const historyLimit = compact ? 4 : 6;
+  const historyEntryLength = compact ? 160 : 420;
+
   const sourceText = citations
-    .slice(0, 6)
-    .map((item, index) => `[${index + 1}] ${item.title}\n${item.excerpt}\nLink: ${item.link}`)
+    .slice(0, sourceLimit)
+    .map((item, index) => `[${index + 1}] ${item.title}\n${clampPromptText(item.excerpt, sourceExcerptLength)}\nLink: ${item.link}`)
     .join("\n\n");
   const priorTurns = history
-    .slice(-6)
-    .map((item) => `${item.role === "user" ? "User" : "Assistant"}: ${item.content}`)
+    .slice(-historyLimit)
+    .map((item) => `${item.role === "user" ? "User" : "Assistant"}: ${clampPromptText(item.content, historyEntryLength)}`)
     .join("\n");
 
   return [
@@ -148,7 +162,17 @@ const buildPrompt = ({ query, citations, history, locale }) => {
     .join("\n\n");
 };
 
-const callOpenAiCompatible = async ({ query, citations, history, locale }) => {
+const streamText = async (content, onChunk) => {
+  const chunks = String(content || "").match(/[\s\S]{1,24}/g) || [];
+  for (const chunk of chunks) {
+    await onChunk(chunk);
+    if (chunks.length > 1) {
+      await sleep(8);
+    }
+  }
+};
+
+const callOpenAiCompatible = async ({ query, citations, history, locale, compact = false }) => {
   if (!env.aiApiKey) return { ok: false, reason: "missing_api_key" };
 
   const controller = new AbortController();
@@ -163,7 +187,7 @@ const callOpenAiCompatible = async ({ query, citations, history, locale }) => {
       },
       body: JSON.stringify({
         model: env.aiModel,
-        messages: [{ role: "user", content: buildPrompt({ query, citations, history, locale }) }],
+        messages: [{ role: "user", content: buildPrompt({ query, citations, history, locale, compact }) }],
         temperature: 0.2,
       }),
       signal: controller.signal,
@@ -186,6 +210,90 @@ const callOpenAiCompatible = async ({ query, citations, history, locale }) => {
   }
 };
 
+const streamOpenAiCompatible = async ({ query, citations, history, locale, compact = false, onChunk }) => {
+  if (!env.aiApiKey) return { ok: false, reason: "missing_api_key" };
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), env.aiTimeoutMs);
+
+  try {
+    const response = await fetch(`${env.aiBaseUrl.replace(/\/$/, "")}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.aiApiKey}`,
+      },
+      body: JSON.stringify({
+        model: env.aiModel,
+        stream: true,
+        messages: [{ role: "user", content: buildPrompt({ query, citations, history, locale, compact }) }],
+        temperature: 0.2,
+      }),
+      signal: controller.signal,
+    }).catch((error) => {
+      if (error?.name === "AbortError") {
+        return { aborted: true };
+      }
+      return null;
+    });
+
+    if (response?.aborted) return { ok: false, reason: "timeout" };
+    if (!response?.ok) return { ok: false, reason: "provider_error" };
+    if (!response.body) return { ok: false, reason: "empty_response" };
+    clearTimeout(timeout);
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let content = "";
+
+    const flushBlock = async (block) => {
+      const lines = block.split(/\r?\n/);
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line.startsWith("data:")) continue;
+        const payload = line.slice(5).trim();
+        if (!payload || payload === "[DONE]") continue;
+        try {
+          const body = JSON.parse(payload);
+          const delta = body?.choices?.[0]?.delta?.content ?? body?.choices?.[0]?.message?.content ?? "";
+          if (!delta) continue;
+          content += delta;
+          await onChunk(delta);
+        } catch {
+          continue;
+        }
+      }
+    };
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const blocks = buffer.split("\n\n");
+      buffer = blocks.pop() || "";
+      for (const block of blocks) {
+        await flushBlock(block);
+      }
+    }
+
+    buffer += decoder.decode();
+    if (buffer.trim()) {
+      await flushBlock(buffer);
+    }
+
+    if (!content) return { ok: false, reason: "empty_response" };
+    return { ok: true, content };
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      return { ok: false, reason: "timeout" };
+    }
+    return { ok: false, reason: "provider_error" };
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
 export const generateAssistantReply = async ({ query, citations, history = [], locale = "zh-CN" }) => {
   const fallbackContent = buildLocalCompletion({ locale, query, citations });
 
@@ -199,6 +307,23 @@ export const generateAssistantReply = async ({ query, citations, history = [], l
         reason: null,
       };
     }
+    if (live.reason === "timeout" && history.length > 0) {
+      const compactRetry = await callOpenAiCompatible({ query, citations, history, locale, compact: true });
+      if (compactRetry.ok) {
+        return {
+          content: compactRetry.content,
+          provider: env.aiProvider,
+          degraded: false,
+          reason: null,
+        };
+      }
+      return {
+        content: fallbackContent,
+        provider: "local",
+        degraded: true,
+        reason: compactRetry.reason || live.reason,
+      };
+    }
     return {
       content: fallbackContent,
       provider: "local",
@@ -206,6 +331,55 @@ export const generateAssistantReply = async ({ query, citations, history = [], l
       reason: live.reason,
     };
   }
+  return {
+    content: fallbackContent,
+    provider: "local",
+    degraded: false,
+    reason: null,
+  };
+};
+
+export const streamAssistantReply = async ({ query, citations, history = [], locale = "zh-CN", onChunk }) => {
+  const fallbackContent = buildLocalCompletion({ locale, query, citations });
+
+  if (env.aiRemoteEnabled) {
+    const live = await streamOpenAiCompatible({ query, citations, history, locale, onChunk });
+    if (live.ok) {
+      return {
+        content: live.content,
+        provider: env.aiProvider,
+        degraded: false,
+        reason: null,
+      };
+    }
+    if (live.reason === "timeout" && history.length > 0) {
+      const compactRetry = await streamOpenAiCompatible({ query, citations, history, locale, compact: true, onChunk });
+      if (compactRetry.ok) {
+        return {
+          content: compactRetry.content,
+          provider: env.aiProvider,
+          degraded: false,
+          reason: null,
+        };
+      }
+      await streamText(fallbackContent, onChunk);
+      return {
+        content: fallbackContent,
+        provider: "local",
+        degraded: true,
+        reason: compactRetry.reason || live.reason,
+      };
+    }
+    await streamText(fallbackContent, onChunk);
+    return {
+      content: fallbackContent,
+      provider: "local",
+      degraded: true,
+      reason: live.reason,
+    };
+  }
+
+  await streamText(fallbackContent, onChunk);
   return {
     content: fallbackContent,
     provider: "local",

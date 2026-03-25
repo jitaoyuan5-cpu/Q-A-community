@@ -11,16 +11,367 @@ const openApiDocument = {
   info: {
     title: "QA Community Public API",
     version: "v1",
+    description: "Read-only public endpoints for questions, answers, articles, tags, topics, and public user profiles.",
+  },
+  components: {
+    securitySchemes: {
+      apiKeyAuth: {
+        type: "apiKey",
+        in: "header",
+        name: "x-api-key",
+      },
+    },
+    parameters: {
+      QuestionId: {
+        name: "id",
+        in: "path",
+        required: true,
+        description: "Question identifier",
+        schema: { type: "integer" },
+      },
+      ArticleId: {
+        name: "id",
+        in: "path",
+        required: true,
+        description: "Article identifier",
+        schema: { type: "integer" },
+      },
+      UserId: {
+        name: "id",
+        in: "path",
+        required: true,
+        description: "User identifier",
+        schema: { type: "integer" },
+      },
+      QuestionIdQuery: {
+        name: "questionId",
+        in: "query",
+        required: true,
+        description: "Question identifier used to filter answers",
+        schema: { type: "integer" },
+      },
+    },
+    responses: {
+      Unauthorized: {
+        description: "Missing or invalid API key",
+        content: {
+          "application/json": {
+            example: { message: "Invalid API key" },
+          },
+        },
+      },
+      RateLimited: {
+        description: "Hourly request limit exceeded",
+        content: {
+          "application/json": {
+            example: { message: "Rate limit exceeded" },
+          },
+        },
+      },
+      NotFound: {
+        description: "Requested resource was not found",
+        content: {
+          "application/json": {
+            example: { message: "Resource not found" },
+          },
+        },
+      },
+      BadRequest: {
+        description: "Request validation failed",
+        content: {
+          "application/json": {
+            example: { message: "questionId is required" },
+          },
+        },
+      },
+    },
+    schemas: {
+      PublicAuthor: {
+        type: "object",
+        required: ["id", "name"],
+        properties: {
+          id: { type: "integer", example: 1 },
+          name: { type: "string", example: "张三" },
+        },
+      },
+      PublicQuestion: {
+        type: "object",
+        required: ["id", "title", "content", "votes", "views", "answers", "tags", "createdAt", "updatedAt", "author"],
+        properties: {
+          id: { type: "integer", example: 1 },
+          title: { type: "string", example: "React 中 useState 和 useReducer 的区别是什么？" },
+          content: { type: "string", example: "我在学习 React Hooks，想知道什么时候应该使用 useState，什么时候应该使用 useReducer？" },
+          votes: { type: "integer", example: 15 },
+          views: { type: "integer", example: 1245 },
+          answers: { type: "integer", example: 3 },
+          tags: { type: "array", items: { type: "string" }, example: ["React", "Hooks"] },
+          createdAt: { type: "string", format: "date-time", example: "2026-03-17T10:30:00.000Z" },
+          updatedAt: { type: "string", format: "date-time", example: "2026-03-17T10:30:00.000Z" },
+          author: { $ref: "#/components/schemas/PublicAuthor" },
+        },
+      },
+      PublicAnswer: {
+        type: "object",
+        required: ["id", "questionId", "content", "votes", "isAccepted", "createdAt", "updatedAt", "author"],
+        properties: {
+          id: { type: "integer", example: 11 },
+          questionId: { type: "integer", example: 1 },
+          content: { type: "string", example: "useState 适合简单状态；useReducer 适合复杂状态逻辑与状态转换。" },
+          votes: { type: "integer", example: 23 },
+          isAccepted: { type: "boolean", example: true },
+          createdAt: { type: "string", format: "date-time", example: "2026-03-17T11:15:00.000Z" },
+          updatedAt: { type: "string", format: "date-time", example: "2026-03-17T11:15:00.000Z" },
+          author: { $ref: "#/components/schemas/PublicAuthor" },
+        },
+      },
+      PublicQuestionDetail: {
+        allOf: [
+          { $ref: "#/components/schemas/PublicQuestion" },
+          {
+            type: "object",
+            required: ["answerItems"],
+            properties: {
+              answerItems: {
+                type: "array",
+                items: { $ref: "#/components/schemas/PublicAnswer" },
+              },
+            },
+          },
+        ],
+      },
+      PublicArticle: {
+        type: "object",
+        required: ["id", "title", "excerpt", "content", "cover", "views", "likes", "comments", "tags", "publishedAt", "author"],
+        properties: {
+          id: { type: "integer", example: 1 },
+          title: { type: "string", example: "深入理解 React Server Components" },
+          excerpt: { type: "string", example: "从渲染边界理解 RSC。" },
+          content: { type: "string", example: "从组件边界、数据获取策略到性能权衡..." },
+          cover: { type: "string", example: "https://example.com/react-rsc.png" },
+          views: { type: "integer", example: 3456 },
+          likes: { type: "integer", example: 128 },
+          comments: { type: "integer", example: 45 },
+          tags: { type: "array", items: { type: "string" }, example: ["React", "前端"] },
+          publishedAt: { type: "string", format: "date-time", example: "2026-03-15T10:00:00.000Z" },
+          author: { $ref: "#/components/schemas/PublicAuthor" },
+        },
+      },
+      PublicTag: {
+        type: "object",
+        required: ["id", "name"],
+        properties: {
+          id: { type: "integer", example: 1 },
+          name: { type: "string", example: "React" },
+        },
+      },
+      PublicTopic: {
+        type: "object",
+        required: ["id", "title", "description", "category", "trend", "posts", "views"],
+        properties: {
+          id: { type: "integer", example: 1 },
+          title: { type: "string", example: "AI 编程助手对开发者的影响" },
+          description: { type: "string", example: "讨论 AI 工具如何改变开发流程与岗位分工。" },
+          category: { type: "string", example: "AI" },
+          trend: { type: "integer", example: 25 },
+          posts: { type: "integer", example: 156 },
+          views: { type: "integer", example: 12400 },
+        },
+      },
+      PublicUserProfile: {
+        type: "object",
+        required: ["id", "name", "avatar", "reputation", "bio", "location", "website", "createdAt", "questions"],
+        properties: {
+          id: { type: "integer", example: 1 },
+          name: { type: "string", example: "张三" },
+          avatar: { type: "string", example: "https://i.pravatar.cc/80?img=1" },
+          reputation: { type: "integer", example: 2850 },
+          bio: { type: "string", nullable: true, example: "专注前端架构与性能优化。" },
+          location: { type: "string", nullable: true, example: "Shanghai" },
+          website: { type: "string", nullable: true, example: "https://example.com" },
+          createdAt: { type: "string", format: "date-time", example: "2026-03-01T00:00:00.000Z" },
+          questions: {
+            type: "array",
+            items: { $ref: "#/components/schemas/PublicQuestion" },
+          },
+        },
+      },
+    },
   },
   paths: {
-    "/api/public/v1/questions": { get: { summary: "List public questions" } },
-    "/api/public/v1/questions/{id}": { get: { summary: "Get public question detail" } },
-    "/api/public/v1/answers": { get: { summary: "List answers by questionId" } },
-    "/api/public/v1/articles": { get: { summary: "List public articles" } },
-    "/api/public/v1/articles/{id}": { get: { summary: "Get public article detail" } },
-    "/api/public/v1/tags": { get: { summary: "List tags" } },
-    "/api/public/v1/topics": { get: { summary: "List topics" } },
-    "/api/public/v1/users/{id}": { get: { summary: "Get public user profile" } },
+    "/api/public/v1/questions": {
+      get: {
+        summary: "List public questions",
+        description: "Returns public, non-hidden questions ordered by creation time.",
+        security: [{ apiKeyAuth: [] }],
+        responses: {
+          200: {
+            description: "A list of public questions",
+            content: {
+              "application/json": {
+                schema: { type: "array", items: { $ref: "#/components/schemas/PublicQuestion" } },
+                example: [
+                  {
+                    id: 1,
+                    title: "React 中 useState 和 useReducer 的区别是什么？",
+                    content: "我在学习 React Hooks...",
+                    votes: 15,
+                    views: 1245,
+                    answers: 3,
+                    tags: ["React", "Hooks"],
+                    createdAt: "2026-03-17T10:30:00.000Z",
+                    updatedAt: "2026-03-17T10:30:00.000Z",
+                    author: { id: 1, name: "张三" },
+                  },
+                ],
+              },
+            },
+          },
+          401: { $ref: "#/components/responses/Unauthorized" },
+          429: { $ref: "#/components/responses/RateLimited" },
+        },
+      },
+    },
+    "/api/public/v1/questions/{id}": {
+      get: {
+        summary: "Get public question detail",
+        description: "Returns one public question and its public answers.",
+        security: [{ apiKeyAuth: [] }],
+        parameters: [{ $ref: "#/components/parameters/QuestionId" }],
+        responses: {
+          200: {
+            description: "Question detail",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/PublicQuestionDetail" },
+              },
+            },
+          },
+          401: { $ref: "#/components/responses/Unauthorized" },
+          404: { $ref: "#/components/responses/NotFound" },
+          429: { $ref: "#/components/responses/RateLimited" },
+        },
+      },
+    },
+    "/api/public/v1/answers": {
+      get: {
+        summary: "List answers by questionId",
+        description: "Returns public answers for a given public question.",
+        security: [{ apiKeyAuth: [] }],
+        parameters: [{ $ref: "#/components/parameters/QuestionIdQuery" }],
+        responses: {
+          200: {
+            description: "Answers for the requested question",
+            content: {
+              "application/json": {
+                schema: { type: "array", items: { $ref: "#/components/schemas/PublicAnswer" } },
+              },
+            },
+          },
+          400: { $ref: "#/components/responses/BadRequest" },
+          401: { $ref: "#/components/responses/Unauthorized" },
+          429: { $ref: "#/components/responses/RateLimited" },
+        },
+      },
+    },
+    "/api/public/v1/articles": {
+      get: {
+        summary: "List public articles",
+        description: "Returns public, non-hidden articles ordered by publish time.",
+        security: [{ apiKeyAuth: [] }],
+        responses: {
+          200: {
+            description: "A list of public articles",
+            content: {
+              "application/json": {
+                schema: { type: "array", items: { $ref: "#/components/schemas/PublicArticle" } },
+              },
+            },
+          },
+          401: { $ref: "#/components/responses/Unauthorized" },
+          429: { $ref: "#/components/responses/RateLimited" },
+        },
+      },
+    },
+    "/api/public/v1/articles/{id}": {
+      get: {
+        summary: "Get public article detail",
+        description: "Returns one public article.",
+        security: [{ apiKeyAuth: [] }],
+        parameters: [{ $ref: "#/components/parameters/ArticleId" }],
+        responses: {
+          200: {
+            description: "Article detail",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/PublicArticle" },
+              },
+            },
+          },
+          401: { $ref: "#/components/responses/Unauthorized" },
+          404: { $ref: "#/components/responses/NotFound" },
+          429: { $ref: "#/components/responses/RateLimited" },
+        },
+      },
+    },
+    "/api/public/v1/tags": {
+      get: {
+        summary: "List tags",
+        description: "Returns all tags used by the public content model.",
+        security: [{ apiKeyAuth: [] }],
+        responses: {
+          200: {
+            description: "A list of tags",
+            content: {
+              "application/json": {
+                schema: { type: "array", items: { $ref: "#/components/schemas/PublicTag" } },
+              },
+            },
+          },
+          401: { $ref: "#/components/responses/Unauthorized" },
+          429: { $ref: "#/components/responses/RateLimited" },
+        },
+      },
+    },
+    "/api/public/v1/topics": {
+      get: {
+        summary: "List topics",
+        description: "Returns public hot topics ordered by trend and views.",
+        security: [{ apiKeyAuth: [] }],
+        responses: {
+          200: {
+            description: "A list of topics",
+            content: {
+              "application/json": {
+                schema: { type: "array", items: { $ref: "#/components/schemas/PublicTopic" } },
+              },
+            },
+          },
+          401: { $ref: "#/components/responses/Unauthorized" },
+          429: { $ref: "#/components/responses/RateLimited" },
+        },
+      },
+    },
+    "/api/public/v1/users/{id}": {
+      get: {
+        summary: "Get public user profile",
+        description: "Returns one public user profile and their public questions.",
+        security: [{ apiKeyAuth: [] }],
+        parameters: [{ $ref: "#/components/parameters/UserId" }],
+        responses: {
+          200: {
+            description: "Public profile detail",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/PublicUserProfile" },
+              },
+            },
+          },
+          401: { $ref: "#/components/responses/Unauthorized" },
+          404: { $ref: "#/components/responses/NotFound" },
+          429: { $ref: "#/components/responses/RateLimited" },
+        },
+      },
+    },
   },
 };
 

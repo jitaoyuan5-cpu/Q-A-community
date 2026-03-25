@@ -307,3 +307,23 @@ a {
   border: 1px solid rgba(24, 33, 51, 0.12);
   box-shadow: var(--shadow-card);
 }
+
+.assistant-caret {
+  width: 0.62rem;
+  height: 1.15rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(15, 118, 110, 0.95), rgba(17, 94, 89, 0.82));
+  animation: assistant-caret-blink 0.95s steps(1, end) infinite;
+}
+
+@keyframes assistant-caret-blink {
+  0%,
+  48% {
+    opacity: 1;
+  }
+
+  49%,
+  100% {
+    opacity: 0.12;
+  }
+}

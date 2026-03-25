@@ -3,6 +3,7 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 import { routeObjects } from "../../src/app/routes";
 import { QAProvider } from "../../src/app/store/qa-context";
 import { AuthProvider } from "../../src/app/auth-context";
+import { I18nProvider } from "../../src/app/i18n";
 
 const TEST_AUTH_STORAGE_KEY = "qa_test_auth_user";
 const defaultTestUser = {
@@ -19,9 +20,11 @@ export const renderAppAt = (path: string, options: { authenticated?: boolean } =
   const router = createMemoryRouter(routeObjects, { initialEntries: [path] });
   return render(
     <AuthProvider>
-      <QAProvider>
-        <RouterProvider router={router} />
-      </QAProvider>
+      <I18nProvider>
+        <QAProvider>
+          <RouterProvider router={router} />
+        </QAProvider>
+      </I18nProvider>
     </AuthProvider>,
   );
 };

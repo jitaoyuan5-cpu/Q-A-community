@@ -137,15 +137,20 @@ export interface ReportRecord {
 }
 
 export interface AssistantCitation {
-  targetType: "question" | "article" | "answer";
+  targetType: "question" | "article" | "answer" | "comment";
   targetId: number;
   title: string;
   excerpt: string;
   link: string;
 }
 
+export interface AssistantContextRef {
+  targetType: AssistantCitation["targetType"];
+  targetId: number;
+}
+
 export interface AssistantReplyMeta {
-  provider: "local" | "openai";
+  provider: "local" | "openai" | "openrouter" | "deepseek" | "moonshot" | "siliconflow" | "compatible";
   degraded: boolean;
   reason?: string | null;
 }

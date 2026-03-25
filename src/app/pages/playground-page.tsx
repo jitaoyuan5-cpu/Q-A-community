@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { apiRequest } from "../api/client";
 import { useAuth } from "../auth-context";
+import { useI18n } from "../i18n";
+import { getP3Copy } from "../utils/p3-copy";
 import type { PlaygroundShare, PlaygroundTemplate } from "../types";
 
 const reactPrelude = `
@@ -39,13 +41,15 @@ const htmlPreview = (files: Record<string, string>) => `<!doctype html>
 </html>`;
 
 export function PlaygroundPage() {
+  const { locale } = useI18n();
+  const copy = getP3Copy(locale).playground;
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [templates, setTemplates] = useState<PlaygroundTemplate[]>([]);
   const [templateKey, setTemplateKey] = useState<PlaygroundTemplate["key"]>("html");
   const [files, setFiles] = useState<Record<string, string>>({});
-  const [title, setTitle] = useState("New Playground");
+  const [title, setTitle] = useState<string>(copy.defaultTitle);
   const [activeFile, setActiveFile] = useState("");
   const [srcDoc, setSrcDoc] = useState("");
   const [error, setError] = useState("");
@@ -105,7 +109,7 @@ export function PlaygroundPage() {
           const parsedFiles = JSON.parse(filesParam) as Record<string, string>;
           const requestedTemplate = items.find((item) => item.key === templateParam) || items[0];
           loadTemplate(requestedTemplate, parsedFiles);
-          setTitle(params.get("title") || "Imported Playground");
+          setTitle(params.get("title") || copy.importedTitle);
           return;
         }
         const requestedTemplate = items.find((item) => item.key === templateParam) || items[0];
@@ -113,7 +117,7 @@ export function PlaygroundPage() {
         if (queryCode) {
           const fileName = requestedTemplate.key === "react" ? "App.tsx" : requestedTemplate.key === "typescript" ? "index.ts" : "script.js";
           loadTemplate(requestedTemplate, { ...requestedTemplate.files, [fileName]: queryCode });
-          setTitle(params.get("title") || "Imported Playground");
+          setTitle(params.get("title") || copy.importedTitle);
           return;
         }
         loadTemplate(requestedTemplate);
@@ -144,9 +148,9 @@ export function PlaygroundPage() {
       <header className="app-panel app-mesh rounded-[2rem] px-6 py-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="max-w-3xl">
-            <p className="app-kicker">Browser lab</p>
-            <h1 className="app-display mt-3 text-4xl font-semibold leading-tight text-slate-900 sm:text-[3.1rem]">把问题里的代码片段直接拖进浏览器实验台。</h1>
-            <p className="mt-4 text-sm leading-7 text-slate-600">Playground 保持“随手试验”的速度，但版式上更像一张工作台：左边代码，右边结果，顶部是模板与分享控制。</p>
+            <p className="app-kicker">{copy.heroKicker}</p>
+            <h1 className="app-display mt-3 text-4xl font-semibold leading-tight text-slate-900 sm:text-[3.1rem]">{copy.heroTitle}</h1>
+            <p className="mt-4 text-sm leading-7 text-slate-600">{copy.heroBody}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <select
@@ -165,15 +169,15 @@ export function PlaygroundPage() {
             </select>
             <button type="button" className="app-button-ghost inline-flex items-center rounded-[1rem] px-3 py-2 text-sm" onClick={() => currentTemplate && loadTemplate(currentTemplate)}>
               <RefreshCcw className="mr-1 h-4 w-4" />
-              重置
+              {copy.reset}
             </button>
             <button type="button" className="app-button-ghost inline-flex items-center rounded-[1rem] px-3 py-2 text-sm" onClick={() => buildPreview().catch((err) => setError((err as Error).message))}>
               <Play className="mr-1 h-4 w-4" />
-              运行
+              {copy.run}
             </button>
             <button type="button" className="app-button-primary inline-flex items-center rounded-[1rem] px-3 py-2 text-sm text-white" onClick={() => saveShare().catch((err) => setError((err as Error).message))}>
               <Share2 className="mr-1 h-4 w-4" />
-              复制分享链接
+              {copy.share}
             </button>
           </div>
         </div>
@@ -181,7 +185,7 @@ export function PlaygroundPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.95fr)]">
         <div className="app-panel rounded-[2rem] p-4">
-          <input value={title} onChange={(event) => setTitle(event.target.value)} className="app-input mb-3 h-11 rounded-[1rem] px-3" placeholder="Playground 标题" />
+          <input value={title} onChange={(event) => setTitle(event.target.value)} className="app-input mb-3 h-11 rounded-[1rem] px-3" placeholder={copy.titlePlaceholder} />
           <div className="mb-3 flex flex-wrap gap-2">
             {Object.keys(files).map((fileName) => (
               <button
@@ -205,10 +209,10 @@ export function PlaygroundPage() {
         <div className="app-panel-dark rounded-[2rem] p-4">
           <div className="mb-3 flex items-center justify-between">
             <div>
-              <p className="app-kicker !text-[#d8c6a3]">Live frame</p>
-              <h2 className="app-display mt-2 text-2xl font-semibold text-[#f8f1e3]">预览</h2>
+              <p className="app-kicker !text-[#d8c6a3]">{copy.previewKicker}</p>
+              <h2 className="app-display mt-2 text-2xl font-semibold text-[#f8f1e3]">{copy.preview}</h2>
             </div>
-            <span className="text-xs text-slate-300">Sandbox</span>
+            <span className="text-xs text-slate-300">{copy.sandboxLabel}</span>
           </div>
           <iframe title="playground-preview" srcDoc={srcDoc} className="h-[560px] w-full rounded-[1.5rem] border border-white/10 bg-white" sandbox="allow-scripts" />
         </div>

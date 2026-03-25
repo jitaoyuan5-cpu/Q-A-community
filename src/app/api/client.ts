@@ -44,7 +44,7 @@ const refreshIfNeeded = async (): Promise<string> => {
   return refreshingPromise;
 };
 
-export const apiRequest = async <T = unknown>(path: string, options: RequestOptions = {}, retry = true): Promise<T> => {
+export const apiFetch = async (path: string, options: RequestOptions = {}, retry = true): Promise<Response> => {
   const accessToken = tokenStore.getAccess();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -60,7 +60,7 @@ export const apiRequest = async <T = unknown>(path: string, options: RequestOpti
   if (response.status === 401 && retry && accessToken) {
     try {
       const newToken = await refreshIfNeeded();
-      return apiRequest<T>(
+      return apiFetch(
         path,
         { ...options, headers: { ...((options.headers || {}) as Record<string, string>), Authorization: `Bearer ${newToken}` } },
         false,
@@ -76,6 +76,11 @@ export const apiRequest = async <T = unknown>(path: string, options: RequestOpti
     throw new Error(body.message || "Request failed");
   }
 
+  return response;
+};
+
+export const apiRequest = async <T = unknown>(path: string, options: RequestOptions = {}, retry = true): Promise<T> => {
+  const response = await apiFetch(path, options, retry);
   if (response.status === 204) return null as T;
   return (await response.json()) as T;
 };

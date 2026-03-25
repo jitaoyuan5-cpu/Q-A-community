@@ -11,7 +11,9 @@ import { MarkdownRenderer } from "../components/content/markdown-renderer";
 import { MarkdownEditor } from "../components/content/markdown-editor";
 import { FavoriteButton } from "../components/content/favorite-button";
 import { ReportButton } from "../components/content/report-button";
+import { useI18n } from "../i18n";
 import { extractFirstCodeBlock, guessPlaygroundTemplate } from "../utils/content";
+import { getP3Copy } from "../utils/p3-copy";
 
 type CommentNode = {
   id: number;
@@ -34,6 +36,8 @@ export function QuestionDetailPage() {
   const { id } = useParams();
   const { state, actions } = useQA();
   const { user } = useAuth();
+  const { locale } = useI18n();
+  const chatCopy = getP3Copy(locale).chat;
   const [content, setContent] = useState("");
   const [detailLoadState, setDetailLoadState] = useState<"idle" | "loading" | "error">("idle");
   const viewedQuestionIdsRef = useRef<Set<string>>(new Set());
@@ -51,7 +55,12 @@ export function QuestionDetailPage() {
   const [chatOnlineCount, setChatOnlineCount] = useState(0);
   const [chatPending, setChatPending] = useState(false);
   const [chatError, setChatError] = useState("");
+  const [chatStatus, setChatStatus] = useState<"connecting" | "connected" | "reconnecting" | "disconnected">("connecting");
+  const [chatReconnectAttempt, setChatReconnectAttempt] = useState(0);
+  const [chatRetryPayload, setChatRetryPayload] = useState("");
   const chatSocketRef = useRef<WebSocket | null>(null);
+  const chatReconnectTimerRef = useRef<number | null>(null);
+  const chatReconnectAttemptsRef = useRef(0);
 
   const question = state.questions.find((item) => item.id === id);
   const questionTargetId = toNumericId(question?.id || "");
@@ -63,6 +72,42 @@ export function QuestionDetailPage() {
       return b.votes - a.votes;
     });
   }, [id, state]);
+
+  const clearChatReconnectTimer = () => {
+    if (chatReconnectTimerRef.current != null) {
+      window.clearTimeout(chatReconnectTimerRef.current);
+      chatReconnectTimerRef.current = null;
+    }
+  };
+
+  const fetchChatSnapshot = async (targetId: number) => {
+    const result = await apiRequest<{ items: any[]; onlineCount: number }>(`/question-chats/${targetId}/messages`);
+    setChatItems(Array.isArray(result?.items) ? result.items : []);
+    setChatOnlineCount(Number(result?.onlineCount || 0));
+  };
+
+  const submitChatMessage = async (draft: string) => {
+    if (!questionTargetId) return;
+    const text = draft.trim();
+    if (!text) return;
+    setChatPending(true);
+    setChatError("");
+    try {
+      const result = await apiRequest<{ items: any[]; onlineCount: number }>(`/question-chats/${questionTargetId}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ content: text }),
+      });
+      setChatItems(Array.isArray(result?.items) ? result.items : []);
+      setChatOnlineCount(Number(result?.onlineCount || 0));
+      setChatText("");
+      setChatRetryPayload("");
+    } catch (err) {
+      setChatError(chatCopy.sendFailed((err as Error).message));
+      setChatRetryPayload(text);
+    } finally {
+      setChatPending(false);
+    }
+  };
 
   const loadComments = async ({ targetType, targetId, threadKey }: CommentTarget) => {
     const rows = await apiRequest<CommentNode[]>(`/comments?targetType=${targetType}&targetId=${targetId}`);
@@ -137,11 +182,7 @@ export function QuestionDetailPage() {
 
   useEffect(() => {
     if (!questionTargetId) return;
-    apiRequest<{ items: any[]; onlineCount: number }>(`/question-chats/${questionTargetId}/messages`)
-      .then((result) => {
-        setChatItems(Array.isArray(result?.items) ? result.items : []);
-        setChatOnlineCount(Number(result?.onlineCount || 0));
-      })
+    fetchChatSnapshot(questionTargetId)
       .catch(() => {
         setChatItems([]);
         setChatOnlineCount(0);
@@ -149,28 +190,73 @@ export function QuestionDetailPage() {
   }, [questionTargetId]);
 
   useEffect(() => {
-    if (import.meta.env.MODE === "test" || !questionTargetId || !user) return;
+    if (import.meta.env.MODE === "test" || !questionTargetId || !user) {
+      setChatStatus("disconnected");
+      clearChatReconnectTimer();
+      return;
+    }
     const token = tokenStore.getAccess();
-    if (!token) return;
-    const socket = new WebSocket(`${apiBase.replace(/^http/, "ws").replace(/\/api$/, "")}/ws/questions/${questionTargetId}/chat?token=${encodeURIComponent(token)}`);
-    chatSocketRef.current = socket;
+    if (!token) {
+      setChatStatus("disconnected");
+      return;
+    }
+    let disposed = false;
 
-    socket.addEventListener("message", (event) => {
-      const payload = JSON.parse(String(event.data || "{}"));
-      if (payload.type === "presence") {
-        setChatOnlineCount(Number(payload.onlineCount || 0));
-      }
-      if (payload.type === "message" && payload.message) {
-        setChatItems((prev) => (prev.some((item) => item.id === payload.message.id) ? prev : [...prev, payload.message]));
-      }
-    });
-    socket.addEventListener("close", () => {
-      chatSocketRef.current = null;
-    });
+    const connect = () => {
+      if (disposed) return;
+      setChatStatus(chatReconnectAttemptsRef.current > 0 ? "reconnecting" : "connecting");
+      const socket = new WebSocket(`${apiBase.replace(/^http/, "ws").replace(/\/api$/, "")}/ws/questions/${questionTargetId}/chat?token=${encodeURIComponent(token)}`);
+      chatSocketRef.current = socket;
+
+      socket.addEventListener("open", () => {
+        chatReconnectAttemptsRef.current = 0;
+        setChatReconnectAttempt(0);
+        setChatStatus("connected");
+        setChatError("");
+        fetchChatSnapshot(questionTargetId).catch(() => undefined);
+      });
+
+      socket.addEventListener("message", (event) => {
+        const payload = JSON.parse(String(event.data || "{}"));
+        if (payload.type === "presence") {
+          setChatOnlineCount(Number(payload.onlineCount || 0));
+        }
+        if (payload.type === "message" && payload.message) {
+          setChatItems((prev) => (prev.some((item) => item.id === payload.message.id) ? prev : [...prev, payload.message]));
+        }
+      });
+
+      socket.addEventListener("error", () => {
+        socket.close();
+      });
+
+      socket.addEventListener("close", () => {
+        if (chatSocketRef.current === socket) {
+          chatSocketRef.current = null;
+        }
+        if (disposed) return;
+        const nextAttempt = chatReconnectAttemptsRef.current + 1;
+        chatReconnectAttemptsRef.current = nextAttempt;
+        setChatReconnectAttempt(nextAttempt);
+        if (nextAttempt > 5) {
+          setChatStatus("disconnected");
+          return;
+        }
+        setChatStatus("reconnecting");
+        clearChatReconnectTimer();
+        chatReconnectTimerRef.current = window.setTimeout(connect, Math.min(1000 * 2 ** (nextAttempt - 1), 8000));
+      });
+    };
+
+    connect();
 
     return () => {
-      socket.close();
+      disposed = true;
+      clearChatReconnectTimer();
+      chatReconnectAttemptsRef.current = 0;
+      const socket = chatSocketRef.current;
       chatSocketRef.current = null;
+      socket?.close();
     };
   }, [questionTargetId, user?.id]);
 
@@ -382,9 +468,20 @@ export function QuestionDetailPage() {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="app-kicker !text-[#d8c6a3]">Live room</p>
-            <h3 className="app-display mt-2 text-3xl font-semibold text-[#f8f1e3]">问题讨论</h3>
+            <h3 className="app-display mt-2 text-3xl font-semibold text-[#f8f1e3]">{chatCopy.title}</h3>
           </div>
-          <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs text-slate-200">在线 {chatOnlineCount} 人</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs text-slate-200">{chatCopy.onlineCount(chatOnlineCount)}</span>
+            <span className="rounded-full border border-white/10 bg-black/10 px-3 py-1.5 text-xs text-slate-300">
+              {chatStatus === "connected"
+                ? chatCopy.connected
+                : chatStatus === "connecting"
+                  ? chatCopy.connecting
+                  : chatStatus === "reconnecting"
+                    ? chatCopy.reconnecting(chatReconnectAttempt)
+                    : chatCopy.disconnected}
+            </span>
+          </div>
         </div>
         <div className="space-y-3">
           {chatItems.length ? (
@@ -401,7 +498,7 @@ export function QuestionDetailPage() {
               </div>
             ))
           ) : (
-            <p className="rounded-[1.3rem] border border-dashed border-white/16 bg-black/10 p-4 text-sm text-slate-300">还没有讨论消息，先发第一条。</p>
+            <p className="rounded-[1.3rem] border border-dashed border-white/16 bg-black/10 p-4 text-sm text-slate-300">{chatCopy.empty}</p>
           )}
         </div>
         {user ? (
@@ -409,33 +506,31 @@ export function QuestionDetailPage() {
             className="mt-4"
             onSubmit={async (event) => {
               event.preventDefault();
-              if (!questionTargetId || !chatText.trim()) return;
-              setChatPending(true);
-              setChatError("");
-              try {
-                const result = await apiRequest<{ items: any[]; onlineCount: number }>(`/question-chats/${questionTargetId}/messages`, {
-                  method: "POST",
-                  body: JSON.stringify({ content: chatText }),
-                });
-                setChatItems(Array.isArray(result?.items) ? result.items : []);
-                setChatOnlineCount(Number(result?.onlineCount || 0));
-                setChatText("");
-              } catch (err) {
-                setChatError((err as Error).message);
-              } finally {
-                setChatPending(false);
-              }
+              await submitChatMessage(chatText);
             }}
           >
-            <MarkdownEditor value={chatText} onChange={setChatText} placeholder="围绕当前问题发起实时讨论..." minHeightClass="min-h-24" />
-            <div className="mt-2 flex justify-end">
+            <MarkdownEditor value={chatText} onChange={setChatText} placeholder={chatCopy.placeholder} minHeightClass="min-h-24" />
+            <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+              {chatRetryPayload ? (
+                <button
+                  type="button"
+                  className="app-button-ghost rounded-[0.9rem] px-3 py-1.5 text-xs"
+                  disabled={chatPending}
+                  onClick={() => {
+                    setChatText(chatRetryPayload);
+                    submitChatMessage(chatRetryPayload).catch(() => undefined);
+                  }}
+                >
+                  {chatCopy.retrySend}
+                </button>
+              ) : null}
               <button type="submit" disabled={!chatText.trim() || chatPending} className="app-button-primary rounded-[0.9rem] px-3 py-1.5 text-xs text-white disabled:cursor-not-allowed disabled:opacity-60">
-                {chatPending ? "发送中..." : "发送消息"}
+                {chatPending ? chatCopy.sending : chatCopy.send}
               </button>
             </div>
             {chatError ? <p className="mt-2 text-xs text-red-300">{chatError}</p> : null}
           </form>
-        ) : <p className="mt-3 text-xs text-slate-300">登录后可加入实时讨论。</p>}
+        ) : <p className="mt-3 text-xs text-slate-300">{chatCopy.loginToJoin}</p>}
       </section>
 
       <section className="app-panel rounded-[2rem] p-5">

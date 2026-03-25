@@ -5,10 +5,14 @@ import { apiRequest } from "../api/client";
 import { FavoriteButton } from "../components/content/favorite-button";
 import { MarkdownRenderer } from "../components/content/markdown-renderer";
 import { useAuth } from "../auth-context";
+import { useI18n } from "../i18n";
 import { useQA } from "../store/qa-context";
+import { getP3Copy } from "../utils/p3-copy";
 import type { Tutorial } from "../types";
 
 export function TutorialDetailPage() {
+  const { locale } = useI18n();
+  const copy = getP3Copy(locale).tutorialDetail;
   const { id } = useParams();
   const tutorialId = Number(id);
   const { user } = useAuth();
@@ -37,6 +41,12 @@ export function TutorialDetailPage() {
     [state.favorites, tutorial],
   );
   const currentLesson = tutorial?.lessons?.find((lesson) => lesson.id === currentLessonId) || tutorial?.lessons?.[0] || null;
+  const difficultyLabel =
+    tutorial?.difficulty === "advanced"
+      ? copy.difficultyAdvanced
+      : tutorial?.difficulty === "intermediate"
+        ? copy.difficultyIntermediate
+        : copy.difficultyBeginner;
 
   const markProgress = async (lessonId: number, progressPercent: number) => {
     if (!tutorialId || !user) return;
@@ -49,8 +59,8 @@ export function TutorialDetailPage() {
   if (!tutorial) {
     return (
       <div className="app-panel rounded-[1.8rem] px-6 py-12 text-center">
-        <h1 className="app-display mb-3 text-3xl font-semibold text-slate-900">教程不存在</h1>
-        <Link to="/tutorials" className="font-medium text-[var(--primary)] hover:underline">返回教程列表</Link>
+        <h1 className="app-display mb-3 text-3xl font-semibold text-slate-900">{copy.notFound}</h1>
+        <Link to="/tutorials" className="font-medium text-[var(--primary)] hover:underline">{copy.backToList}</Link>
       </div>
     );
   }
@@ -62,9 +72,9 @@ export function TutorialDetailPage() {
           <div className="relative">
             <img src={tutorial.cover} alt={tutorial.title} className="h-72 w-full object-cover" />
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#102034] via-[#102034]/60 to-transparent px-6 py-7">
-              <Link to="/tutorials" className="text-sm text-slate-200 hover:text-white">返回教程列表</Link>
+              <Link to="/tutorials" className="text-sm text-slate-200 hover:text-white">{copy.backToList}</Link>
               <h1 className="app-display mt-3 text-[2.6rem] font-semibold leading-tight text-white">{tutorial.title}</h1>
-              <p className="mt-2 text-sm text-slate-200">{tutorial.author.name} · {tutorial.difficulty}</p>
+              <p className="mt-2 text-sm text-slate-200">{tutorial.author.name} · {difficultyLabel}</p>
             </div>
           </div>
           <div className="p-6">
@@ -91,7 +101,7 @@ export function TutorialDetailPage() {
           <article className="app-panel rounded-[2rem] p-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="app-kicker">Current lesson</p>
+                <p className="app-kicker">{copy.currentLessonKicker}</p>
                 <h2 className="app-display mt-2 text-3xl font-semibold text-slate-900">{currentLesson.title}</h2>
               </div>
               <button
@@ -102,7 +112,7 @@ export function TutorialDetailPage() {
                   window.location.href = `/playground?template=${currentLesson.starterTemplate || "react"}&title=${encodeURIComponent(`${tutorial.title} - ${currentLesson.title}`)}&files=${encodeURIComponent(JSON.stringify(currentLesson.starterFiles))}`;
                 }}
               >
-                在 Playground 打开
+                {copy.openPlayground}
               </button>
             </div>
             <p className="mb-4 text-sm leading-7 text-slate-600">{currentLesson.description}</p>
@@ -121,7 +131,7 @@ export function TutorialDetailPage() {
                   await refresh();
                 }}
               >
-                记录进度
+                {copy.recordProgress}
               </button>
             </div>
           </article>
@@ -132,10 +142,10 @@ export function TutorialDetailPage() {
         <div className="app-panel-dark sticky top-28 rounded-[2rem] p-4">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <p className="app-kicker !text-[#d8c6a3]">Lesson rail</p>
-              <h3 className="app-display mt-2 text-2xl font-semibold text-[#f8f1e3]">课程章节</h3>
+              <p className="app-kicker !text-[#d8c6a3]">{copy.railKicker}</p>
+              <h3 className="app-display mt-2 text-2xl font-semibold text-[#f8f1e3]">{copy.chapters}</h3>
             </div>
-            <span className="text-xs text-slate-300">进度 {tutorial.progressPercent || 0}%</span>
+            <span className="text-xs text-slate-300">{copy.progress(tutorial.progressPercent || 0)}</span>
           </div>
           <div className="space-y-2">
             {(tutorial.lessons || []).map((lesson) => (
@@ -156,7 +166,7 @@ export function TutorialDetailPage() {
                 <p className="font-medium text-[#f8f1e3]">{lesson.title}</p>
                 <div className="mt-2 flex items-center gap-3 text-xs text-slate-300">
                   <span className="inline-flex items-center gap-1"><PlayCircle className="h-3.5 w-3.5" />{lesson.videoProvider}</span>
-                  <span className="inline-flex items-center gap-1"><BookOpen className="h-3.5 w-3.5" />{Math.ceil(lesson.durationSeconds / 60)} min</span>
+                  <span className="inline-flex items-center gap-1"><BookOpen className="h-3.5 w-3.5" />{copy.minutes(Math.ceil(lesson.durationSeconds / 60))}</span>
                 </div>
               </button>
             ))}
